@@ -5,6 +5,7 @@ import AudioToolbox
 struct AudioDevice: Identifiable, Hashable {
     let id: AudioDeviceID
     let name: String
+    let systemName: String
     let uid: String
     let isAggregate: Bool
     let transportType: UInt32
@@ -269,7 +270,7 @@ class AudioDeviceManager: ObservableObject {
                 let name = self.customNames[uid] ?? systemName
                 let isAgg = isAggregateDevice(deviceID: deviceID)
                 let transport = getDeviceTransportType(deviceID: deviceID)
-                devices.append(AudioDevice(id: deviceID, name: name, uid: uid, isAggregate: isAgg, transportType: transport))
+                devices.append(AudioDevice(id: deviceID, name: name, systemName: systemName, uid: uid, isAggregate: isAgg, transportType: transport))
             }
         }
         

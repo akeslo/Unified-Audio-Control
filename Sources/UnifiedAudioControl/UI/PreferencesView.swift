@@ -51,7 +51,7 @@ struct GeneralSettingsView: View {
                     Text("Unified Audio Control")
                         .font(.title2)
                         .fontWeight(.bold)
-                    Text("Version 1.0.0")
+                    Text("Version 1.0.1")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }

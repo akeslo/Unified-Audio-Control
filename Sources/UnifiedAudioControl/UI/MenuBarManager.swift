@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import CoreAudio
 
 class MenuBarManager: NSObject {
     var statusItem: NSStatusItem?
@@ -229,18 +230,71 @@ struct MenuBarView: View {
             
             // Output Device Selection
             VStack(alignment: .leading) {
-                Picker("Output Device", selection: $audioManager.selectedDeviceID) {
+                // Unified Selection Binding
+                let selectionBinding = Binding<String>(
+                    get: {
+                        if let device = audioManager.outputDevices.first(where: { $0.id == audioManager.selectedDeviceID }) {
+                            return device.uid
+                        }
+                        return ""
+                    },
+                    set: { newValue in
+                        // 1. Try to find in active output devices
+                        if let device = audioManager.outputDevices.first(where: { $0.uid == newValue }) {
+                             audioManager.selectDevice(deviceID: device.id)
+                             
+                             // Check for Bluetooth force-connect for active devices (Hijack scenario)
+                             if device.transportType == kAudioDeviceTransportTypeBluetooth {
+                                 // Check if we need to force connect (e.g. if we want to ensure we grab it)
+                                 // The user explicitly selected it from the list, so we should arguably ensure we have it.
+                                 // We can try to find the matching BT device to call connect()
+                                 if let btDevice = bluetoothManager.recentDevices.first(where: {
+                                     device.uid.contains($0.id) || device.name == $0.name
+                                 }) {
+                                     print("DEBUG: Active Bluetooth device selected. Ensuring connection...")
+                                     bluetoothManager.connect(device: btDevice)
+                                 }
+                             }
+                        }
+                        // 2. Try to find in Bluetooth devices (Disconnected/Inactive)
+                        else if let btDevice = bluetoothManager.recentDevices.first(where: { $0.id == newValue }) {
+                            print("DEBUG: Inactive/Disconnected Bluetooth device selected. Connecting...")
+                            bluetoothManager.connect(device: btDevice)
+                        }
+                    }
+                )
+                
+                Picker("Output Device", selection: selectionBinding) {
+                    // Section 1: Active Output Devices
                     ForEach(audioManager.outputDevices) { device in
-                        Text(device.name).tag(device.id)
+                        Text(device.name).tag(device.uid)
+                    }
+                    
+                    // Section 2: Available Bluetooth Devices (only those NOT already in CoreAudio list)
+                    // Filter to prevent duplicates in the picker
+                    let pickerBluetooth = bluetoothManager.recentDevices.filter { device in
+                        let cleanBTID = device.id.replacingOccurrences(of: ":", with: "-").uppercased()
+                        // Exclude if this BT device is already in the CoreAudio list
+                        return !audioManager.outputDevices.contains(where: {
+                            $0.uid.replacingOccurrences(of: ":", with: "-").uppercased().contains(cleanBTID)
+                        })
+                    }
+                    
+                    if !pickerBluetooth.isEmpty {
+                        Divider()
+                        ForEach(pickerBluetooth) { device in
+                            Text(device.name).tag(device.id)
+                        }
                     }
                 }
                 .pickerStyle(MenuPickerStyle())
                 .padding(.horizontal)
                 .onChange(of: audioManager.selectedDeviceID) { _, newValue in
-                    audioManager.selectDevice(deviceID: newValue)
+                    // This onChange is mostly for side-effects like expanding the brightness slider
+                    // The core selection logic is now in the Binding setter above
                     
-                    // Auto-expand if selected device is a display
                     if let selectedDevice = audioManager.outputDevices.first(where: { $0.id == newValue }) {
+                        // Auto-expand if selected device is a display
                         for display in displayManager.displays {
                             // Check for built-in match or name match
                             let isMatch = (display.isBuiltIn && selectedDevice.isBuiltIn) ||
@@ -258,28 +312,10 @@ struct MenuBarView: View {
                 }
             }
             
-            // Bluetooth Devices Section
-            // Combine disconnected devices and connected devices that aren't active audio outputs
-            let availableBluetooth = bluetoothManager.recentDevices.filter { device in
-                // Include if:
-                // 1. Not connected (Disconnected)
-                // 2. Connected but not currently in the audio output list (Standby/Multipoint)
-                
-                if !device.isConnected { return true }
-                
-                // For connected devices, check if they are already an available output
-                // If they ARE in the output list, we don't need to show them here (user can select them from the top picker)
-                // If they are NOT in the output list, show them here so user can "Connect" (force switch)
-                let isKnownOutput = audioManager.outputDevices.contains { audioDevice in
-                    // Fuzzy match name
-                    audioDevice.name.localizedCaseInsensitiveContains(device.name) ||
-                    device.name.localizedCaseInsensitiveContains(audioDevice.name)
-                }
-                
-                return !isKnownOutput
-            }
+            // Bluetooth Devices Section - Show all BT devices for easy reconnection
+            let availableBluetoothList = bluetoothManager.recentDevices
             
-            if !availableBluetooth.isEmpty {
+            if !availableBluetoothList.isEmpty {
                 Divider()
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -303,12 +339,24 @@ struct MenuBarView: View {
                     .padding(.horizontal)
                     
                     if isBluetoothExpanded {
-                        ForEach(availableBluetooth) { device in
+                        ForEach(availableBluetoothList) { device in
                             HStack {
                                 Image(systemName: "airpods")
                                     .foregroundColor(device.isConnected ? .blue : .secondary) // Show blue if technically connected
                                 
-                                Text(device.name)
+                                // Use custom name if there's a matching CoreAudio device
+                                let displayName: String = {
+                                    // Try to find matching CoreAudio device by UID/MAC
+                                    let cleanBTID = device.id.replacingOccurrences(of: ":", with: "-").uppercased()
+                                    if let matchingAudio = audioManager.outputDevices.first(where: {
+                                        $0.uid.replacingOccurrences(of: ":", with: "-").uppercased().contains(cleanBTID)
+                                    }) {
+                                        return matchingAudio.name
+                                    }
+                                    return device.name
+                                }()
+                                
+                                Text(displayName)
                                     .font(.callout)
                                 
                                 Spacer()
@@ -318,7 +366,7 @@ struct MenuBarView: View {
                                 }) {
                                     if device.isConnected {
                                         Text("Connected")
-                                            .foregroundColor(.secondary)
+                                            .foregroundColor(.primary)
                                             .font(.caption)
                                     } else {
                                         Text("Connect")
@@ -327,7 +375,6 @@ struct MenuBarView: View {
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
-                                .disabled(device.isConnected)
                             }
                             .padding(.horizontal)
                         }
