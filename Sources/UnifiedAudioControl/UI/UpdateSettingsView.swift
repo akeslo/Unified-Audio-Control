@@ -246,6 +246,16 @@ struct UpdateSettingsView: View {
             }
             
             Spacer()
+            
+            // Footer
+            HStack {
+                Spacer()
+                Link("Made by Outsource Wisely", destination: URL(string: "https://www.outsourcewisely.com/")!)
+                    .font(.caption)
+                    .foregroundColor(.accentColor)
+                Spacer()
+            }
+            .padding(.top, 8)
         }
         .padding()
         .sheet(isPresented: $showingUpdateAlert) {
