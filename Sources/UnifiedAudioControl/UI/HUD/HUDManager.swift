@@ -9,9 +9,10 @@ class HUDManager: ObservableObject {
     
     @Published var currentType: HUDType = .volume
     @Published var currentValue: Float = 0.5
+    @Published var currentDeviceName: String?
     @Published var isVisible: Bool = false
     
-    func show(type: HUDType, value: Float) {
+    func show(type: HUDType, value: Float, deviceName: String? = nil) {
         // Check preference (default to true)
         let showHUD = UserDefaults.standard.object(forKey: "showHUD") as? Bool ?? true
         guard showHUD else { return }
@@ -19,10 +20,11 @@ class HUDManager: ObservableObject {
         DispatchQueue.main.async {
             self.currentType = type
             self.currentValue = value
+            self.currentDeviceName = deviceName
             self.isVisible = true
             
             self.ensureWindow()
-            self.window?.makeKeyAndOrderFront(nil)
+            self.window?.orderFrontRegardless()
             self.window?.alphaValue = 1.0
             
             self.debouncer?.invalidate()
@@ -40,35 +42,30 @@ class HUDManager: ObservableObject {
     
     private func ensureWindow() {
         if window == nil {
- 
-            
-            // We need to wrap the view to listen to published changes
-            // Actually, best to just recreate the hosting controller's root view or rely on Observation
-            // Simpler: Just host a wrapper that observes this manager
-            
             let hostHelper = HUDHostView().environmentObject(self)
             
-            // Width/Height matches HUDView frame + small buffer if needed, but hosting view fits content
-            let panelWidth: CGFloat = 240
+            // Start with a reasonable default, panel will size to content
+            let panelWidth: CGFloat = 500
             let panelHeight: CGFloat = 50
             
             let panel = NSPanel(
                 contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight),
-                styleMask: [.borderless, .nonactivatingPanel],
+                styleMask: [.borderless, .nonactivatingPanel, .hudWindow],
                 backing: .buffered,
                 defer: false
             )
             panel.backgroundColor = .clear
             panel.isOpaque = false
             panel.hasShadow = false
-            panel.level = .floating
+            panel.level = .popUpMenu
+            panel.ignoresMouseEvents = true
             panel.collectionBehavior = [.canJoinAllSpaces, .transient]
             
             // Position at bottom center
             if let screen = NSScreen.main {
                 let screenRect = screen.visibleFrame
                 let x = screenRect.midX - (panelWidth / 2)
-                let y = screenRect.minY + 60 // 60px from bottom excluding dock area
+                let y = screenRect.minY + 60
                 panel.setFrameOrigin(NSPoint(x: x, y: y))
             } else {
                 panel.center()
@@ -85,7 +82,7 @@ struct HUDHostView: View {
     @EnvironmentObject var manager: HUDManager
     
     var body: some View {
-        HUDView(type: manager.currentType, value: manager.currentValue)
-            .opacity(manager.isVisible ? 1 : 0) // handled by window alpha usually, but redundancy is safe
+        HUDView(type: manager.currentType, value: manager.currentValue, deviceName: manager.currentDeviceName)
+            .opacity(manager.isVisible ? 1 : 0)
     }
 }

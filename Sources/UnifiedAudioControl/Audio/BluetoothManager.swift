@@ -35,6 +35,13 @@ class BluetoothManager: ObservableObject {
         refreshTimer?.invalidate()
     }
     
+    /// Keys for UserDefaults
+    private let kConnectionHistoryKey = "BluetoothDeviceConnectionHistory"
+    private let kDeviceNamesKey = "BluetoothDeviceNames"
+    
+    /// Callback for connection failures
+    var onConnectionFailed: (() -> Void)?
+    
     /// Refreshes the list of paired Bluetooth audio devices
     func refreshDevices() {
         var devices: [BluetoothAudioDevice] = []
@@ -47,7 +54,29 @@ class BluetoothManager: ObservableObject {
             return
         }
         
+        // Load connection history and names
+        var connectionHistory = UserDefaults.standard.dictionary(forKey: kConnectionHistoryKey) as? [String: Date] ?? [:]
+        var deviceNames = UserDefaults.standard.dictionary(forKey: kDeviceNamesKey) as? [String: String] ?? [:]
+        
+        var historyChanged = false
+        var namesChanged = false
+        
         for device in pairedDevices {
+            let address = device.addressString ?? ""
+            let isConnected = device.isConnected()
+            
+            // Update connection history and name if currently connected
+            if isConnected {
+                connectionHistory[address] = Date()
+                historyChanged = true
+                
+                // Save the current name (which should be the user-assigned alias)
+                if let name = device.name {
+                    deviceNames[address] = name
+                    namesChanged = true
+                }
+            }
+            
             // Check if this is an audio device by looking at device class
             // Audio devices have specific class bits set:
             // Major class 0x04 = Audio/Video
@@ -63,14 +92,52 @@ class BluetoothManager: ObservableObject {
             let hasAudioService = deviceHasAudioServices(device)
             
             if isAudioVideoDevice || hasAudioService {
-                let btDevice = BluetoothAudioDevice(
-                    id: device.addressString ?? UUID().uuidString,
-                    name: device.name ?? "Unknown Device",
-                    isConnected: device.isConnected(),
-                    isPaired: device.isPaired()
-                )
-                devices.append(btDevice)
+                // FILTERING LOGIC:
+                // Include if:
+                // 1. Currently connected
+                // 2. Connected within last 3 days
+                
+                let lastConnectionDate = connectionHistory[address]
+                
+                var shouldInclude = isConnected
+                
+                if !shouldInclude, let date = lastConnectionDate {
+                    // Check if within 3 days
+                    // 3 days * 24 hours * 3600 seconds
+                    if Date().timeIntervalSince(date) < (3 * 24 * 3600) {
+                        shouldInclude = true
+                    }
+                }
+                
+                if shouldInclude {
+                    // Use stored name if disconnected to preserve alias
+                    // Use current name if connected (most up to date)
+                    let displayName: String
+                    if isConnected {
+                        displayName = device.name ?? "Unknown Device"
+                    } else {
+                        displayName = deviceNames[address] ?? device.name ?? "Unknown Device"
+                    }
+                    
+                    let btDevice = BluetoothAudioDevice(
+                        id: address,
+                        name: displayName,
+                        isConnected: isConnected,
+                        isPaired: device.isPaired()
+                    )
+                    devices.append(btDevice)
+                }
             }
+        }
+        
+        // Save updated history if needed
+        if historyChanged {
+            UserDefaults.standard.set(connectionHistory, forKey: kConnectionHistoryKey)
+        }
+        
+        // Save updated names if needed
+        if namesChanged {
+            UserDefaults.standard.set(deviceNames, forKey: kDeviceNamesKey)
         }
         
         // Sort by name
@@ -150,19 +217,29 @@ class BluetoothManager: ObservableObject {
     }
     
     private func performConnection(btDevice: IOBluetoothDevice, name: String) {
-        // Open connection to the device
-        // This triggers the macOS Bluetooth system to attempt connection
-        let result = btDevice.openConnection()
-        
-        if result == kIOReturnSuccess {
-            print("BluetoothManager: Connection initiated to \(name)")
+        // Run connection attempt on background thread to avoid blocking UI
+        DispatchQueue.global(qos: .userInitiated).async {
+            print("BluetoothManager: Initiating connection to \(name) in background...")
             
-            // Refresh devices after a short delay to update UI
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                self?.refreshDevices()
+            // Open connection to the device
+            // This triggers the macOS Bluetooth system to attempt connection
+            // This call can block for several seconds
+            let result = btDevice.openConnection()
+            
+            DispatchQueue.main.async {
+                if result == kIOReturnSuccess {
+                    print("BluetoothManager: Connection initiated to \(name)")
+                    
+                    // Refresh devices after a short delay to update UI
+                    // We wait a bit longer to ensure the system registers the state change
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                        self?.refreshDevices()
+                    }
+                } else {
+                    print("BluetoothManager: Failed to connect to \(name), error: \(result)")
+                    self.onConnectionFailed?()
+                }
             }
-        } else {
-            print("BluetoothManager: Failed to connect to \(name), error: \(result)")
         }
     }
     

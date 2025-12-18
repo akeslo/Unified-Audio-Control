@@ -12,12 +12,24 @@ class MenuBarManager: NSObject {
     let audioManager = AudioDeviceManager()
     let displayManager = DisplayManager()
     let bluetoothManager = BluetoothManager()
+    let mediaKeyManager = MediaKeyManager()
+    
     @Published var currentVolume: Float = 0.0
     
     static let shared = MenuBarManager()
     
     override init() {
         super.init()
+        
+        // Set media key delegate and start listening (if permission allowed)
+        mediaKeyManager.delegate = self
+        // Note: Starting relies on Accessibility permissions.
+        // It's best to check/start after app launch or on user action.
+        // We'll attempt to start it here, and if it fails due to permissions,
+        // it prints to console. Real implementation might want a UI prompt.
+        if mediaKeyManager.checkAccessibilityPermissions() {
+             mediaKeyManager.start()
+        }
         
         // Delay setup to next run loop to avoid layout issues during app init
         DispatchQueue.main.async {
@@ -57,6 +69,12 @@ class MenuBarManager: NSObject {
 
         // Ensure the initial state is up-to-date
         audioManager.updateCurrentState()
+        
+        // Handle Bluetooth connection failures
+        bluetoothManager.onConnectionFailed = { [weak self] in
+            // Flash warning icon for 5 seconds
+            self?.showTemporaryIcon(name: "exclamationmark.triangle.fill", duration: 5.0)
+        }
     }
 
     private func updateCurrentVolumeAndIcon(volume: Float, isMuted: Bool, canControlVolume: Bool, selectedDeviceID: AudioDevice.ID, displays: [DisplayInfo]) {
@@ -88,7 +106,13 @@ class MenuBarManager: NSObject {
         popover?.behavior = .transient
     }
 
+    private var temporaryIconTimer: Timer?
+    private var isShowingTemporaryIcon = false
+
     func updateIcon() {
+        // Don't overwrite temporary icon
+        if isShowingTemporaryIcon { return }
+        
         let imageName: String
         let volume = self.currentVolume
         
@@ -104,8 +128,25 @@ class MenuBarManager: NSObject {
             imageName = "speaker.wave.3.fill"
         }
         
+        setIcon(systemName: imageName)
+    }
+    
+    func showTemporaryIcon(name: String, duration: TimeInterval) {
+        // Cancel existing timer
+        temporaryIconTimer?.invalidate()
+        
+        isShowingTemporaryIcon = true
+        setIcon(systemName: name)
+        
+        temporaryIconTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+            self?.isShowingTemporaryIcon = false
+            self?.updateIcon()
+        }
+    }
+    
+    private func setIcon(systemName: String) {
         if let button = statusItem?.button {
-            let image = NSImage(systemSymbolName: imageName, accessibilityDescription: "Audio Control")
+            let image = NSImage(systemSymbolName: systemName, accessibilityDescription: "Audio Control")
             image?.isTemplate = true
             button.image = image
         }
@@ -504,6 +545,8 @@ struct MenuBarView: View {
                 Button("Preferences...") {
                     menuBarManager?.openPreferences()
                 }
+
+
                 Spacer()
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
@@ -528,4 +571,42 @@ struct MenuBarView: View {
     }
     
 
+}
+
+extension MenuBarManager: MediaKeyDelegate {
+    func onVolumeUp() {
+        // Check if selected device is a display (DDC volume) - no HUD, they have hardware OSD
+        if let selectedDisplay = displayManager.displays.first(where: { isSelectedAudioDevice(display: $0) }) {
+            let newVol = min(selectedDisplay.volume + 0.0625, 1.0)
+            displayManager.setVolume(displayID: CGDirectDisplayID(selectedDisplay.id), value: newVol)
+            currentVolume = newVol
+        } else {
+            // Standard audio device - show our HUD with device name
+            let newVol = min(audioManager.volume + 0.0625, 1.0)
+            audioManager.setVolume(newVol)
+            currentVolume = newVol
+            let deviceName = audioManager.outputDevices.first(where: { $0.id == audioManager.selectedDeviceID })?.name
+            HUDManager.shared.show(type: .volume, value: newVol, deviceName: deviceName)
+        }
+    }
+    
+    func onVolumeDown() {
+        if let selectedDisplay = displayManager.displays.first(where: { isSelectedAudioDevice(display: $0) }) {
+            let newVol = max(selectedDisplay.volume - 0.0625, 0.0)
+            displayManager.setVolume(displayID: CGDirectDisplayID(selectedDisplay.id), value: newVol)
+            currentVolume = newVol
+        } else {
+            let newVol = max(audioManager.volume - 0.0625, 0.0)
+            audioManager.setVolume(newVol)
+            currentVolume = newVol
+            let deviceName = audioManager.outputDevices.first(where: { $0.id == audioManager.selectedDeviceID })?.name
+            HUDManager.shared.show(type: .volume, value: newVol, deviceName: deviceName)
+        }
+    }
+    
+    func onMute() {
+        audioManager.toggleMute()
+        let deviceName = audioManager.outputDevices.first(where: { $0.id == audioManager.selectedDeviceID })?.name
+        HUDManager.shared.show(type: .volume, value: audioManager.isMuted ? 0 : audioManager.volume, deviceName: deviceName)
+    }
 }
