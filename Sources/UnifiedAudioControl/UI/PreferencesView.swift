@@ -28,6 +28,11 @@ struct PreferencesView: View {
                 .tabItem {
                     Label("Shortcuts", systemImage: "keyboard")
                 }
+            
+            UpdateSettingsView()
+                .tabItem {
+                    Label("Updates", systemImage: "arrow.triangle.2.circlepath")
+                }
         }
         .frame(width: 600, height: 450)
         .padding()

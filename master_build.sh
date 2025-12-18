@@ -6,6 +6,17 @@ echo "Starting Clean Build and Bundle..."
 # Clean previous artifacts (if any survive)
 rm -rf UnifiedAudioControl.app
 
+# 0. Determine Version
+echo "Detecting Version..."
+# Try to get version from git tag, fall back to default
+VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+if [ -z "$VERSION" ]; then
+    VERSION="1.0.3"
+    echo "No git tag found, using default version: $VERSION"
+else
+    echo "Using version from git tag: $VERSION"
+fi
+
 # 1. Build
 echo "Building Release..."
 swift build -c release
@@ -64,8 +75,8 @@ echo '    <key>CFBundleName</key><string>UnifiedAudioControl</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleSignature</key><string>????</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>' >> "$PLIST"
-echo '    <key>CFBundleShortVersionString</key><string>1.0.3</string>' >> "$PLIST"
-echo '    <key>CFBundleVersion</key><string>1.0.3</string>' >> "$PLIST"
+echo '    <key>CFBundleShortVersionString</key><string>'$VERSION'</string>' >> "$PLIST"
+echo '    <key>CFBundleVersion</key><string>'$VERSION'</string>' >> "$PLIST"
 echo '    <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSBluetoothAlwaysUsageDescription</key><string>Unified Audio Control needs Bluetooth access to detect and connect to your paired devices.</string>
