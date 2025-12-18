@@ -64,8 +64,8 @@ echo '    <key>CFBundleName</key><string>UnifiedAudioControl</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleSignature</key><string>????</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>' >> "$PLIST"
-echo '    <key>CFBundleShortVersionString</key><string>1.1</string>' >> "$PLIST"
-echo '    <key>CFBundleVersion</key><string>1</string>' >> "$PLIST"
+echo '    <key>CFBundleShortVersionString</key><string>1.0.3</string>' >> "$PLIST"
+echo '    <key>CFBundleVersion</key><string>1.0.3</string>' >> "$PLIST"
 echo '    <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSBluetoothAlwaysUsageDescription</key><string>Unified Audio Control needs Bluetooth access to detect and connect to your paired devices.</string>

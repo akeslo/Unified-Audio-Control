@@ -576,7 +576,9 @@ struct MenuBarView: View {
 extension MenuBarManager: MediaKeyDelegate {
     func onVolumeUp() {
         // Check if selected device is a display (DDC volume) - no HUD, they have hardware OSD
-        if let selectedDisplay = displayManager.displays.first(where: { isSelectedAudioDevice(display: $0) }) {
+        // EXCEPTION: Built-in displays (laptops) shouldn't be controlled via DDC for volume,
+        // they should use standard system volume path.
+        if let selectedDisplay = displayManager.displays.first(where: { isSelectedAudioDevice(display: $0) }), !selectedDisplay.isBuiltIn {
             let newVol = min(selectedDisplay.volume + 0.0625, 1.0)
             displayManager.setVolume(displayID: CGDirectDisplayID(selectedDisplay.id), value: newVol)
             currentVolume = newVol
@@ -591,7 +593,7 @@ extension MenuBarManager: MediaKeyDelegate {
     }
     
     func onVolumeDown() {
-        if let selectedDisplay = displayManager.displays.first(where: { isSelectedAudioDevice(display: $0) }) {
+        if let selectedDisplay = displayManager.displays.first(where: { isSelectedAudioDevice(display: $0) }), !selectedDisplay.isBuiltIn {
             let newVol = max(selectedDisplay.volume - 0.0625, 0.0)
             displayManager.setVolume(displayID: CGDirectDisplayID(selectedDisplay.id), value: newVol)
             currentVolume = newVol
