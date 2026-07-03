@@ -94,7 +94,7 @@ class MenuBarManager: NSObject {
     
     func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        
+
         if let button = statusItem?.button {
             updateIcon() // Set initial icon
             button.action = #selector(togglePopover)

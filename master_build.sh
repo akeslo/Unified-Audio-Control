@@ -70,7 +70,7 @@ echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com
 echo '<plist version="1.0">' >> "$PLIST"
 echo '<dict>' >> "$PLIST"
 echo '    <key>CFBundleExecutable</key><string>UnifiedAudioControl</string>' >> "$PLIST"
-echo '    <key>CFBundleIdentifier</key><string>com.example.UnifiedAudioControl</string>' >> "$PLIST"
+echo '    <key>CFBundleIdentifier</key><string>com.akeslo.unifiedaudiocontrol</string>' >> "$PLIST"
 echo '    <key>CFBundleName</key><string>UnifiedAudioControl</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleSignature</key><string>????</string>
