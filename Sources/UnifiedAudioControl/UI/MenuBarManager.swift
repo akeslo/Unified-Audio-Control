@@ -78,18 +78,24 @@ class MenuBarManager: NSObject {
     }
 
     private func updateCurrentVolumeAndIcon(volume: Float, isMuted: Bool, canControlVolume: Bool, selectedDeviceID: AudioDevice.ID, displays: [DisplayInfo]) {
-        if canControlVolume {
-            currentVolume = volume
-        } else {
-            // Find the selected display that is also the audio output
-            if let selectedDisplay = displays.first(where: { self.isSelectedAudioDevice(display: $0) }) {
-                currentVolume = selectedDisplay.volume
-            } else {
-                // Fallback to audioManager.volume if no DDC display is selected
-                currentVolume = volume
-            }
-        }
+        let selectedDisplay = displays.first(where: { self.isSelectedAudioDevice(display: $0) })
+        currentVolume = MenuBarManager.resolveVolume(
+            canControlVolume: canControlVolume,
+            audioVolume: volume,
+            matchedDisplayVolume: selectedDisplay?.volume
+        )
         updateIcon()
+    }
+
+    /// Pure decision function for which volume value should be reflected in the UI.
+    /// Extracted for unit testing (no AppKit/CoreAudio dependency).
+    static func resolveVolume(canControlVolume: Bool, audioVolume: Float, matchedDisplayVolume: Float?) -> Float {
+        if canControlVolume {
+            return audioVolume
+        }
+        // Prefer the matched DDC display's volume; fall back to the audio device volume
+        // if no DDC-controllable display is currently selected.
+        return matchedDisplayVolume ?? audioVolume
     }
     
     func setupMenuBar() {
@@ -112,23 +118,25 @@ class MenuBarManager: NSObject {
     func updateIcon() {
         // Don't overwrite temporary icon
         if isShowingTemporaryIcon { return }
-        
-        let imageName: String
-        let volume = self.currentVolume
-        
-        if self.audioManager.isMuted {
-            imageName = "speaker.slash.fill"
-        } else if volume == 0 {
-            imageName = "speaker.fill"
-        } else if volume <= 0.33 {
-            imageName = "speaker.wave.1.fill"
-        } else if volume <= 0.66 {
-            imageName = "speaker.wave.2.fill"
-        } else {
-            imageName = "speaker.wave.3.fill"
-        }
-        
+
+        let imageName = MenuBarManager.iconName(isMuted: self.audioManager.isMuted, volume: self.currentVolume)
         setIcon(systemName: imageName)
+    }
+
+    /// Pure decision function mapping (muted, volume) to an SF Symbol name.
+    /// Extracted for unit testing (no AppKit/CoreAudio dependency).
+    static func iconName(isMuted: Bool, volume: Float) -> String {
+        if isMuted {
+            return "speaker.slash.fill"
+        } else if volume == 0 {
+            return "speaker.fill"
+        } else if volume <= 0.33 {
+            return "speaker.wave.1.fill"
+        } else if volume <= 0.66 {
+            return "speaker.wave.2.fill"
+        } else {
+            return "speaker.wave.3.fill"
+        }
     }
     
     func showTemporaryIcon(name: String, duration: TimeInterval) {
@@ -196,22 +204,29 @@ class MenuBarManager: NSObject {
         guard let selectedDevice = audioManager.outputDevices.first(where: { $0.id == audioManager.selectedDeviceID }) else {
             return false
         }
-        
+
+        return MenuBarManager.matches(selectedDevice: selectedDevice, display: display)
+    }
+
+    /// Pure decision function for whether an `AudioDevice` and a `DisplayInfo` represent
+    /// the same physical output (used to route volume/DDC control to the right UI surface).
+    /// Extracted for unit testing (no AppKit/CoreAudio dependency).
+    static func matches(selectedDevice: AudioDevice, display: DisplayInfo) -> Bool {
         // 1. Check for UID/UUID match (Strongest)
         // Audio Device UID often contains the Display UUID or Serial
         // Example Audio UID: "05E39027-0000-0000-1C1F-0103803C2278"
         // Example Display UUID: "05E39027-0000-0000-1C1F-0103803C2278" (if fetched correctly)
         // Or sometimes Audio UID is "AppleHDAEngineOutput:..." containing the serial.
-        
+
         if !display.uuid.isEmpty && selectedDevice.uid.contains(display.uuid) {
             return true
         }
-        
+
         // 2. Check for built-in match
         if display.isBuiltIn && selectedDevice.isBuiltIn {
             return true
         }
-        
+
         // 3. Fallback to name match (Weakest)
         return selectedDevice.name.contains(display.name) || display.name.contains(selectedDevice.name)
     }

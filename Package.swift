@@ -34,6 +34,11 @@ let package = Package(
                     "-framework", "IOBluetooth"
                 ])
             ]
+        ),
+        .testTarget(
+            name: "UnifiedAudioControlTests",
+            dependencies: ["UnifiedAudioControl"],
+            path: "Tests/UnifiedAudioControlTests"
         )
     ]
 )

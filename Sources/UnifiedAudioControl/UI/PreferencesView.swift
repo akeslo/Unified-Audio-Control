@@ -2,6 +2,37 @@ import SwiftUI
 import CoreAudio
 import ServiceManagement
 
+/// UserDefaults keys used by the preferences UI. Centralized so persistence logic
+/// can be unit tested independently of the SwiftUI views that use `@AppStorage`.
+enum PreferencesKeys {
+    static let launchAtLogin = "launchAtLogin"
+    static let showHUD = "showHUD"
+}
+
+/// Thin, testable wrapper around the preferences UserDefaults reads/writes.
+/// `GeneralSettingsView` uses `@AppStorage` (which is backed by the same keys/UserDefaults
+/// instance) for live SwiftUI binding; this struct exists so the persistence behavior
+/// itself (defaults, round-tripping) can be exercised in unit tests without instantiating
+/// any SwiftUI view.
+struct PreferencesStore {
+    let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    var launchAtLogin: Bool {
+        get { defaults.bool(forKey: PreferencesKeys.launchAtLogin) }
+        nonmutating set { defaults.set(newValue, forKey: PreferencesKeys.launchAtLogin) }
+    }
+
+    /// Defaults to `true` when unset, matching `@AppStorage("showHUD") private var showHUD = true`.
+    var showHUD: Bool {
+        get { (defaults.object(forKey: PreferencesKeys.showHUD) as? Bool) ?? true }
+        nonmutating set { defaults.set(newValue, forKey: PreferencesKeys.showHUD) }
+    }
+}
+
 struct PreferencesView: View {
     @ObservedObject var audioManager: AudioDeviceManager
     @ObservedObject var displayManager: DisplayManager
@@ -40,8 +71,8 @@ struct PreferencesView: View {
 }
 
 struct GeneralSettingsView: View {
-    @AppStorage("launchAtLogin") var launchAtLogin = false
-    @AppStorage("showHUD") private var showHUD = true
+    @AppStorage(PreferencesKeys.launchAtLogin) var launchAtLogin = false
+    @AppStorage(PreferencesKeys.showHUD) private var showHUD = true
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {

@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    name: Build & Test (macOS)
+    runs-on: macos-latest
+
+    env:
+      # Must match CFBundleIdentifier set in master_build.sh
+      EXPECTED_BUNDLE_ID: com.akeslo.unifiedaudiocontrol
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # master_build.sh uses `git describe --tags` for versioning
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Test
+        run: |
+          if [ -d "Tests" ]; then
+            swift test
+          else
+            echo "No Tests/ directory present yet — skipping swift test."
+          fi
+
+      - name: Run master_build.sh (produce app bundle)
+        run: |
+          chmod +x ./master_build.sh
+          ./master_build.sh
+
+      - name: Verify bundle identifier
+        run: |
+          PLIST="UnifiedAudioControl.app/Contents/Info.plist"
+          if [ ! -f "$PLIST" ]; then
+            echo "::error::Info.plist not found at $PLIST"
+            exit 1
+          fi
+
+          ACTUAL_BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw -o - "$PLIST")
+          echo "Expected bundle identifier: $EXPECTED_BUNDLE_ID"
+          echo "Actual bundle identifier:   $ACTUAL_BUNDLE_ID"
+
+          if [ "$ACTUAL_BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]; then
+            echo "::error::Bundle identifier mismatch! Expected '$EXPECTED_BUNDLE_ID' but got '$ACTUAL_BUNDLE_ID'. This is the exact class of defect fixed in commit 32cfe8c — do not ship."
+            exit 1
+          fi
+
+          echo "Bundle identifier check passed."
+
+      - name: Verify built binary exists
+        run: |
+          BIN="UnifiedAudioControl.app/Contents/MacOS/UnifiedAudioControl"
+          if [ ! -x "$BIN" ]; then
+            echo "::error::Expected executable not found at $BIN"
+            exit 1
+          fi
+          echo "Found built binary at $BIN"
