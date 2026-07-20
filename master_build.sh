@@ -8,14 +8,14 @@ rm -rf UnifiedAudioControl.app
 
 # 0. Determine Version
 echo "Detecting Version..."
-# Try to get version from git tag, fall back to default
+# Version comes from the git tag — there is no correct default.
 VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
 if [ -z "$VERSION" ]; then
-    VERSION="1.0.3"
-    echo "No git tag found, using default version: $VERSION"
-else
-    echo "Using version from git tag: $VERSION"
+    echo "ERROR: no git tag found — cannot determine version." >&2
+    echo "Tag the release first (e.g. git tag v1.0.4), then re-run." >&2
+    exit 1
 fi
+echo "Using version from git tag: $VERSION"
 
 # 1. Build
 echo "Building Release..."
