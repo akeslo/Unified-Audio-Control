@@ -27,9 +27,21 @@ mkdir -p UnifiedAudioControl.app/Contents/Resources
 cp .build/release/UnifiedAudioControl UnifiedAudioControl.app/Contents/MacOS/
 ```
 
+0. Determine Version
+// turbo
+```bash
+VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+if [ -z "$VERSION" ]; then
+    echo "ERROR: no git tag found — cannot determine version." >&2
+    echo "Tag the release first (e.g. git tag v1.0.4), then re-run." >&2
+    exit 1
+fi
+```
+
 4. Create Info.plist
 // turbo
 ```bash
+VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
 cat > UnifiedAudioControl.app/Contents/Info.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -38,21 +50,23 @@ cat > UnifiedAudioControl.app/Contents/Info.plist <<EOF
     <key>CFBundleExecutable</key>
     <string>UnifiedAudioControl</string>
     <key>CFBundleIdentifier</key>
-    <string>com.example.UnifiedAudioControl</string>
+    <string>com.akeslo.unifiedaudiocontrol</string>
     <key>CFBundleName</key>
     <string>UnifiedAudioControl</string>
     <key>CFBundleIconFile</key>
-    <string>AppIcon.icns</string>
+    <string>AppIcon</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.3</string>
+    <string>$VERSION</string>
     <key>CFBundleVersion</key>
-    <string>1.0.3</string>
+    <string>$VERSION</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>UnifiedAudioControl uses Bluetooth to detect and manage audio devices.</string>
+    <string>Unified Audio Control needs Bluetooth access to detect and connect to your paired devices.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>Unified Audio Control needs Bluetooth access to detect and connect to your paired devices.</string>
 </dict>
 </plist>
 EOF
