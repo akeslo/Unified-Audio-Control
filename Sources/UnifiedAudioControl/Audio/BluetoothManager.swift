@@ -19,7 +19,50 @@ struct BluetoothAudioDevice: Identifiable, Hashable {
 /// Manages Bluetooth audio device discovery and connection
 class BluetoothManager: ObservableObject {
     @Published var recentDevices: [BluetoothAudioDevice] = []
-    
+
+    // MARK: - Pure decision/matching logic (unit-testable, no IOBluetooth access)
+
+    /// Keywords that identify an audio device by name when service-class inspection is inconclusive.
+    static let audioNameKeywords = ["airpods", "beats", "headphone", "earphone", "earbud", "speaker", "audio", "bose", "sony wh", "wf-", "jabra", "jbl"]
+
+    /// True iff a Bluetooth SDP service-class-ID-list description mentions an audio profile
+    /// (A2DP/AVRCP/Headset/Handsfree/Audio Sink/Source all fall in the 0x110x/0x111x range).
+    static func serviceClassIndicatesAudio(_ description: String) -> Bool {
+        description.contains("110") || description.contains("111")
+    }
+
+    /// True iff a device's advertised name matches a known audio-device keyword (case-insensitive).
+    static func nameIndicatesAudioDevice(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return audioNameKeywords.contains { lower.contains($0) }
+    }
+
+    /// A Bluetooth class-of-device's major class is Audio/Video (0x04) when bits 8-12 equal 0x04.
+    static func isAudioVideoMajorClass(_ deviceClass: UInt32) -> Bool {
+        let majorClass = (deviceClass >> 8) & 0x1F
+        return majorClass == 0x04
+    }
+
+    /// Include a device if it's currently connected, or was connected within the recent window.
+    static func shouldIncludeDevice(isConnected: Bool, lastConnectionDate: Date?, now: Date = Date(), recentWindow: TimeInterval = 3 * 24 * 3600) -> Bool {
+        if isConnected { return true }
+        guard let date = lastConnectionDate else { return false }
+        return now.timeIntervalSince(date) < recentWindow
+    }
+
+    /// Resolves the display name: live name while connected (freshest), else the last-stored alias.
+    static func resolveDisplayName(isConnected: Bool, currentName: String?, storedName: String?) -> String {
+        if isConnected {
+            return currentName ?? "Unknown Device"
+        }
+        return storedName ?? currentName ?? "Unknown Device"
+    }
+
+    /// Sorts devices alphabetically by name (case-insensitive).
+    static func sortedByName(_ devices: [BluetoothAudioDevice]) -> [BluetoothAudioDevice] {
+        devices.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     private var refreshTimer: Timer?
     
     init() {
@@ -82,11 +125,10 @@ class BluetoothManager: ObservableObject {
             // Major class 0x04 = Audio/Video
             // Minor classes include headphones, speakers, etc.
             let deviceClass = device.classOfDevice
-            let majorClass = (deviceClass >> 8) & 0x1F
-            
+
             // Major class 0x04 = Audio/Video devices
             // Also check for hands-free (0x02 with minor 0x04) and headset profiles
-            let isAudioVideoDevice = majorClass == 0x04
+            let isAudioVideoDevice = BluetoothManager.isAudioVideoMajorClass(UInt32(deviceClass))
             
             // Include devices that have audio-related services
             let hasAudioService = deviceHasAudioServices(device)
@@ -98,27 +140,14 @@ class BluetoothManager: ObservableObject {
                 // 2. Connected within last 3 days
                 
                 let lastConnectionDate = connectionHistory[address]
-                
-                var shouldInclude = isConnected
-                
-                if !shouldInclude, let date = lastConnectionDate {
-                    // Check if within 3 days
-                    // 3 days * 24 hours * 3600 seconds
-                    if Date().timeIntervalSince(date) < (3 * 24 * 3600) {
-                        shouldInclude = true
-                    }
-                }
-                
+
+                let shouldInclude = BluetoothManager.shouldIncludeDevice(isConnected: isConnected, lastConnectionDate: lastConnectionDate)
+
                 if shouldInclude {
                     // Use stored name if disconnected to preserve alias
                     // Use current name if connected (most up to date)
-                    let displayName: String
-                    if isConnected {
-                        displayName = device.name ?? "Unknown Device"
-                    } else {
-                        displayName = deviceNames[address] ?? device.name ?? "Unknown Device"
-                    }
-                    
+                    let displayName = BluetoothManager.resolveDisplayName(isConnected: isConnected, currentName: device.name, storedName: deviceNames[address])
+
                     let btDevice = BluetoothAudioDevice(
                         id: address,
                         name: displayName,
@@ -141,8 +170,8 @@ class BluetoothManager: ObservableObject {
         }
         
         // Sort by name
-        devices.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        
+        devices = BluetoothManager.sortedByName(devices)
+
         DispatchQueue.main.async {
             // Only update if changed to avoid unnecessary redraws
             if devices != self.recentDevices {
@@ -172,24 +201,15 @@ class BluetoothManager: ObservableObject {
             // Look for audio UUIDs in service class ID list
             if let serviceClassIDList = attributes["0001"] { // Service Class ID List
                 let description = String(describing: serviceClassIDList)
-                // Check for common audio service UUIDs
-                if description.contains("110") || // Audio profiles are in 0x110x range
-                   description.contains("111") {  // Handsfree profiles
+                // Check for common audio service UUIDs (A2DP/AVRCP/Headset/Handsfree profiles)
+                if BluetoothManager.serviceClassIndicatesAudio(description) {
                     return true
                 }
             }
         }
-        
+
         // Fallback: Check device name for common audio device patterns
-        let name = device.name?.lowercased() ?? ""
-        let audioKeywords = ["airpods", "beats", "headphone", "earphone", "earbud", "speaker", "audio", "bose", "sony wh", "wf-", "jabra", "jbl"]
-        for keyword in audioKeywords {
-            if name.contains(keyword) {
-                return true
-            }
-        }
-        
-        return false
+        return BluetoothManager.nameIndicatesAudioDevice(device.name ?? "")
     }
     
     /// Attempts to connect to a Bluetooth device

@@ -24,12 +24,72 @@ class AudioDeviceManager: ObservableObject {
     @Published var volume: Float = 0.0
     @Published var isMuted: Bool = false
     @Published var canControlVolume: Bool = false
-    
+
+    // MARK: - Pure decision/matching logic (unit-testable, no CoreAudio access)
+
+    /// Parses the comma-separated ignored-UID persistence format.
+    static func parseIgnoredUIDs(_ raw: String) -> Set<String> {
+        Set(raw.split(separator: ",").map { String($0) })
+    }
+
+    /// Toggles a single UID's membership in the ignored set based on desired visibility.
+    static func toggledIgnoredUIDs(_ ignored: Set<String>, uid: String, visible: Bool) -> Set<String> {
+        var result = ignored
+        if visible {
+            result.remove(uid)
+        } else {
+            result.insert(uid)
+        }
+        return result
+    }
+
+    /// Adds/removes a custom name entry for a device UID.
+    static func toggledCustomNames(_ names: [String: String], uid: String, newName: String) -> [String: String] {
+        var result = names
+        if newName.isEmpty {
+            result.removeValue(forKey: uid)
+        } else {
+            result[uid] = newName
+        }
+        return result
+    }
+
+    /// Resolves the display name for a device: custom name if set, else the system-reported name.
+    static func resolveDisplayName(customNames: [String: String], uid: String, systemName: String) -> String {
+        customNames[uid] ?? systemName
+    }
+
+    /// Filters out ignored devices and sorts the remainder alphabetically (case-insensitive).
+    static func sortedVisibleDevices(_ devices: [AudioDevice], ignoredUIDs: Set<String>) -> [AudioDevice] {
+        devices
+            .filter { !ignoredUIDs.contains($0.uid) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// A CoreAudio stream-list property size is non-zero iff the device exposes streams in that scope.
+    static func hasOutputStreams(propertySize: UInt32) -> Bool {
+        propertySize > 0
+    }
+
+    /// A device is an aggregate device iff its transport type matches the aggregate constant.
+    static func isAggregateTransportType(_ transportType: UInt32) -> Bool {
+        transportType == kAudioDeviceTransportTypeAggregate
+    }
+
+    /// Volume of an aggregate device is the max volume among its output sub-devices (0 if none).
+    static func maxVolume(_ volumes: [Float]) -> Float {
+        volumes.max() ?? 0.0
+    }
+
+    /// An aggregate device can have its volume set if any output sub-device can.
+    static func anySettable(_ settableFlags: [Bool]) -> Bool {
+        settableFlags.contains(true)
+    }
+
     var ignoredDeviceUIDs: Set<String> {
         get {
             let string = UserDefaults.standard.string(forKey: "ignoredAudioDeviceUIDs") ?? ""
-            let uids = string.split(separator: ",").map { String($0) }
-            return Set(uids)
+            return AudioDeviceManager.parseIgnoredUIDs(string)
         }
         set {
             let string = newValue.joined(separator: ",")
@@ -49,13 +109,7 @@ class AudioDeviceManager: ObservableObject {
     }
     
     func setVisibility(uid: String, visible: Bool) {
-        var ignored = ignoredDeviceUIDs
-        if visible {
-            ignored.remove(uid)
-        } else {
-            ignored.insert(uid)
-        }
-        self.ignoredDeviceUIDs = ignored
+        self.ignoredDeviceUIDs = AudioDeviceManager.toggledIgnoredUIDs(ignoredDeviceUIDs, uid: uid, visible: visible)
     }
     
     // Keep track of all devices for Preferences
@@ -267,23 +321,23 @@ class AudioDeviceManager: ObservableObject {
             if isOutputDevice(deviceID: deviceID) {
                 let systemName = getDeviceName(deviceID: deviceID)
                 let uid = getDeviceUID(deviceID: deviceID)
-                let name = self.customNames[uid] ?? systemName
+                let name = AudioDeviceManager.resolveDisplayName(customNames: self.customNames, uid: uid, systemName: systemName)
                 let isAgg = isAggregateDevice(deviceID: deviceID)
                 let transport = getDeviceTransportType(deviceID: deviceID)
                 devices.append(AudioDevice(id: deviceID, name: name, systemName: systemName, uid: uid, isAggregate: isAgg, transportType: transport))
             }
         }
-        
+
         // Sort alphabetically
         devices.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        
+
         // Update all devices list
         DispatchQueue.main.async {
             self.allOutputDevices = devices
         }
-        
+
         // Filter ignored devices
-        return devices.filter { !self.ignoredDeviceUIDs.contains($0.uid) }
+        return AudioDeviceManager.sortedVisibleDevices(devices, ignoredUIDs: self.ignoredDeviceUIDs)
     }
     
     func selectDevice(deviceID: AudioDeviceID) {
@@ -296,14 +350,8 @@ class AudioDeviceManager: ObservableObject {
     func setCustomName(deviceID: AudioDeviceID, name: String) {
         let uid = getDeviceUID(deviceID: deviceID)
         guard !uid.isEmpty else { return }
-        
-        var names = self.customNames
-        if name.isEmpty {
-            names.removeValue(forKey: uid)
-        } else {
-            names[uid] = name
-        }
-        self.customNames = names
+
+        self.customNames = AudioDeviceManager.toggledCustomNames(self.customNames, uid: uid, newName: name)
     }
     
     func setVolume(_ newVolume: Float) {
@@ -357,7 +405,7 @@ class AudioDeviceManager: ObservableObject {
         )
         
         AudioObjectGetPropertyDataSize(deviceID, &propertyAddress, 0, nil, &propertySize)
-        return propertySize > 0
+        return AudioDeviceManager.hasOutputStreams(propertySize: propertySize)
     }
     
     private func getDeviceName(deviceID: AudioDeviceID) -> String {
@@ -422,14 +470,10 @@ class AudioDeviceManager: ObservableObject {
     private func getDeviceVolume(deviceID: AudioDeviceID) -> Float {
         if isAggregateDevice(deviceID: deviceID) {
             let subDevices = getAggregateDeviceSubDeviceList(deviceID: deviceID)
-            var maxVol: Float = 0.0
-            for subDevice in subDevices {
-                if isOutputDevice(deviceID: subDevice) {
-                    let vol = getDeviceVolume(deviceID: subDevice)
-                    if vol > maxVol { maxVol = vol }
-                }
-            }
-            return maxVol
+            let volumes = subDevices
+                .filter { isOutputDevice(deviceID: $0) }
+                .map { getDeviceVolume(deviceID: $0) }
+            return AudioDeviceManager.maxVolume(volumes)
         }
 
         var volume: Float32 = 0
@@ -457,12 +501,10 @@ class AudioDeviceManager: ObservableObject {
     private func checkCanSetVolume(deviceID: AudioDeviceID) -> Bool {
         if isAggregateDevice(deviceID: deviceID) {
             let subDevices = getAggregateDeviceSubDeviceList(deviceID: deviceID)
-            for subDevice in subDevices {
-                if isOutputDevice(deviceID: subDevice) && checkCanSetVolume(deviceID: subDevice) {
-                    return true
-                }
-            }
-            return false
+            let settableFlags = subDevices
+                .filter { isOutputDevice(deviceID: $0) }
+                .map { checkCanSetVolume(deviceID: $0) }
+            return AudioDeviceManager.anySettable(settableFlags)
         }
         
         var propertyAddress = AudioObjectPropertyAddress(
@@ -560,7 +602,7 @@ class AudioDeviceManager: ObservableObject {
         )
         
         AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &transportType)
-        return transportType == kAudioDeviceTransportTypeAggregate
+        return AudioDeviceManager.isAggregateTransportType(transportType)
     }
     
     private func getDeviceTransportType(deviceID: AudioDeviceID) -> UInt32 {
