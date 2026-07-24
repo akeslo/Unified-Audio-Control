@@ -63,6 +63,10 @@ cat > UnifiedAudioControl.app/Contents/Info.plist <<EOF
     <string>com.akeslo.unifiedaudiocontrol</string>
     <key>CFBundleName</key>
     <string>UnifiedAudioControl</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleShortVersionString</key>
