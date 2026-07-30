@@ -18,6 +18,8 @@ Unified Audio Control is a native Swift/SwiftUI menu bar utility for macOS that 
 - HUD overlays mimic macOS’ native brightness/volume heads-up display whenever you adjust sliders.
 - A global hotkey (configurable in Preferences) toggles the popover so you never have to click the status icon.
 - Preferences include launch-at-login, visibility toggles, and per-device/per-display custom names to keep lists tidy.
+- Media keys (volume up/down/mute) are handled directly, showing the same HUD as the in-app sliders.
+- Built-in updater checks GitHub Releases and can install new versions from the Preferences window.
 
 ## Project Status
 - Tested on Apple Silicon and Intel Macs running macOS 13+.
