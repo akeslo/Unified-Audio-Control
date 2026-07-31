@@ -24,11 +24,12 @@ class MenuBarManager: NSObject {
         // Set media key delegate and start listening (if permission allowed)
         mediaKeyManager.delegate = self
         // Note: Starting relies on Accessibility permissions.
-        // It's best to check/start after app launch or on user action.
-        // We'll attempt to start it here, and if it fails due to permissions,
-        // it prints to console. Real implementation might want a UI prompt.
+        // checkAccessibilityPermissions() will prompt the user if needed.
         if mediaKeyManager.checkAccessibilityPermissions() {
-             mediaKeyManager.start()
+            let startSuccess = mediaKeyManager.start()
+            if !startSuccess {
+                print("WARNING: Media key listening failed. Grant Accessibility permission in System Settings > Privacy & Security > Accessibility.")
+            }
         }
         
         // Delay setup to next run loop to avoid layout issues during app init

@@ -14,15 +14,15 @@ class MediaKeyManager {
     
     init() {}
     
-    func start() {
-        guard eventTap == nil else { return }
-        
+    func start() -> Bool {
+        guard eventTap == nil else { return true }
+
         // Listen for all events to capture system defined ones
         // System defined events have type 14 but we use a broad mask
         let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue) |
                                      (1 << CGEventType.keyUp.rawValue) |
                                      (1 << 14)  // NX_SYSDEFINED
-        
+
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -37,17 +37,19 @@ class MediaKeyManager {
             },
             userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         ) else {
-            print("MediaKeyManager: Failed to create event tap. Check Accessibility permissions.")
-            return
+            print("MediaKeyManager: Failed to create event tap. Check Accessibility permissions in System Settings > Privacy & Security.")
+            return false
         }
-        
+
         eventTap = tap
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        
+
         if let source = runLoopSource {
             CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
         }
+
+        return true
     }
     
     func stop() {

@@ -38,17 +38,54 @@ class DisplayManager: ObservableObject {
             refreshDisplays()
         }
     }
-    
+
+    // MARK: - Pure Logic Functions (testable without hardware access)
+
+    /// Resolve the display name, preferring custom name over system name.
+    /// Extracted for unit testing (no CoreGraphics dependency).
+    static func resolveDisplayName(customNames: [String: String], uuid: String, systemName: String) -> String {
+        return customNames[uuid] ?? systemName
+    }
+
+    /// Update the set of ignored display UUIDs based on visibility toggle.
+    /// Extracted for unit testing.
+    static func toggledIgnoredDisplayUUIDs(_ current: [String], uuid: String, visible: Bool) -> [String] {
+        var updated = Set(current)
+        if visible {
+            updated.remove(uuid)
+        } else {
+            updated.insert(uuid)
+        }
+        return Array(updated)
+    }
+
+    /// Update custom display names when user renames a display.
+    /// Extracted for unit testing.
+    static func toggledCustomDisplayNames(_ current: [String: String], uuid: String, newName: String) -> [String: String] {
+        var updated = current
+        if newName.isEmpty {
+            updated.removeValue(forKey: uuid)
+        } else {
+            updated[uuid] = newName
+        }
+        return updated
+    }
+
+    /// Filter and sort displays by visibility and name.
+    /// Extracted for unit testing (no CoreGraphics dependency).
+    static func sortedVisibleDisplays(_ displays: [DisplayInfo], ignoredUUIDs: [String]) -> [DisplayInfo] {
+        let ignored = Set(ignoredUUIDs)
+        return displays
+            .filter { !ignored.contains($0.uuid) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     func setVisibility(uuid: String, visible: Bool) {
         print("DEBUG: setVisibility uuid=\(uuid) visible=\(visible)")
-        var ignored = ignoredDisplayUUIDs
-        if visible {
-            ignored.remove(uuid)
-        } else {
-            ignored.insert(uuid)
-        }
+        var ignored = Array(ignoredDisplayUUIDs)
+        ignored = Self.toggledIgnoredDisplayUUIDs(ignored, uuid: uuid, visible: visible)
         print("DEBUG: New ignored list: \(ignored)")
-        self.ignoredDisplayUUIDs = ignored
+        self.ignoredDisplayUUIDs = Set(ignored)
     }
     
     private var intelDDCs: [CGDirectDisplayID: IntelDDC] = [:]
