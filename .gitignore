@@ -5,3 +5,9 @@
 *.zip
 
 UnifiedAudioControl.zip
+
+# Build artifacts master_build.sh writes into the repo root. The bundled binary
+# was committed three times before it was removed from tracking; nothing stopped
+# a `git add` from re-adding it until this rule existed.
+UnifiedAudioControl.app/
+Assets/AppIcon.iconset/

@@ -22,7 +22,7 @@ Unified Audio Control is a native Swift/SwiftUI menu bar utility for macOS that 
 - Built-in updater checks GitHub Releases and can install new versions from the Preferences window.
 
 ## Project Status
-- Tested on Apple Silicon and Intel Macs running macOS 13+.
+- Requires macOS 14 or later (`Package.swift` declares `.macOS(.v14)`); tested on Apple Silicon and Intel Macs.
 - Audio device switching, brightness control, and HUDs are functional today.
 - Per-app audio routing is intentionally deferred until there is a redistributable driver solution.
 
