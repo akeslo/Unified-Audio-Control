@@ -106,4 +106,44 @@ final class DisplayManagerLogicTests: XCTestCase {
             isBuiltIn: isBuiltIn
         )
     }
+
+    // MARK: - ddcFraction(current:max:)
+
+    func test_ddcFraction_convertsNormalReading() {
+        XCTAssertEqual(DisplayManager.ddcFraction(current: 50, max: 100), 0.5)
+        XCTAssertEqual(DisplayManager.ddcFraction(current: 0, max: 100), 0.0)
+        XCTAssertEqual(DisplayManager.ddcFraction(current: 100, max: 100), 1.0)
+    }
+
+    /// Regression: a flaky DDC channel answers with max == 0, and `current / max`
+    /// produced NaN (0/0) or +Inf. Both reached `UInt16(value * 100)`, which traps.
+    func test_ddcFraction_returnsNilWhenMaxIsZero() {
+        XCTAssertNil(DisplayManager.ddcFraction(current: 0, max: 0))
+        XCTAssertNil(DisplayManager.ddcFraction(current: 40, max: 0))
+    }
+
+    func test_ddcFraction_clampsReadingAboveMax() {
+        XCTAssertEqual(DisplayManager.ddcFraction(current: 200, max: 100), 1.0)
+    }
+
+    // MARK: - ddcPercent(fromFraction:)
+
+    func test_ddcPercent_convertsFractionToPercent() {
+        XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: 0.0), 0)
+        XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: 0.5), 50)
+        XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: 1.0), 100)
+    }
+
+    /// Regression: `UInt16(Float.nan * 100)` is an unconditional runtime trap, and the
+    /// value arrives from a Slider binding whose store could hold a non-finite read.
+    func test_ddcPercent_survivesNonFiniteInput() {
+        XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: .nan), 0)
+        XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: .infinity), 100)
+        XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: -.infinity), 0)
+    }
+
+    func test_ddcPercent_clampsOutOfRangeInput() {
+        XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: -0.4), 0)
+        XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: 3.0), 100)
+    }
 }

@@ -104,6 +104,24 @@ final class AudioDeviceManagerLogicTests: XCTestCase {
         XCTAssertFalse(AudioDeviceManager.hasOutputStreams(propertySize: 0))
     }
 
+    // MARK: - hasOutputStreams(status:propertySize:)
+
+    func test_hasOutputStreams_true_whenQuerySucceedsWithStreams() {
+        XCTAssertTrue(AudioDeviceManager.hasOutputStreams(status: noErr, propertySize: 32))
+    }
+
+    func test_hasOutputStreams_false_whenQuerySucceedsWithNoStreams() {
+        XCTAssertFalse(AudioDeviceManager.hasOutputStreams(status: noErr, propertySize: 0))
+    }
+
+    /// Regression: the caller seeded `propertySize` to 256 and discarded the status,
+    /// so a failed query returned the seed — and the seed meant "has output streams".
+    /// Input-only devices could be listed as outputs and made the system default.
+    func test_hasOutputStreams_false_whenQueryFails_regardlessOfSizeSeed() {
+        XCTAssertFalse(AudioDeviceManager.hasOutputStreams(status: OSStatus(-1), propertySize: 256))
+        XCTAssertFalse(AudioDeviceManager.hasOutputStreams(status: OSStatus(-1), propertySize: 0))
+    }
+
     // MARK: - isAggregateTransportType(_:)
 
     func test_isAggregateTransportType_true_forAggregateConstant() {

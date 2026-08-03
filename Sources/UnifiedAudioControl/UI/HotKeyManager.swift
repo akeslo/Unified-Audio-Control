@@ -67,13 +67,26 @@ class HotKeyManager: ObservableObject {
         UserDefaults.standard.set(modifiers, forKey: "globalHotKeyModifiers")
     }
     
+    /// Decide whether a persisted hotkey exists, given the raw UserDefaults objects.
+    ///
+    /// `UserDefaults.integer(forKey:)` returns 0 both for "absent" and for a stored 0,
+    /// and `kVK_ANSI_A` *is* 0 — so gating restore on `keyCode != 0` meant a hotkey
+    /// bound to the A key was saved correctly and then silently never re-registered
+    /// after a relaunch, with nothing shown to the user. Presence, not value, is the
+    /// question. Extracted for unit testing (no Carbon dependency).
+    static func storedHotKey(keyCodeObject: Any?, modifiersObject: Any?) -> (keyCode: Int, modifiers: Int)? {
+        guard let keyCode = keyCodeObject as? Int else { return nil }
+        let modifiers = modifiersObject as? Int ?? 0
+        return (keyCode, modifiers)
+    }
+
     private func loadHotKey() {
-        let keyCode = UserDefaults.standard.integer(forKey: "globalHotKeyKeyCode")
-        let modifiers = UserDefaults.standard.integer(forKey: "globalHotKeyModifiers")
-        
-        if keyCode != 0 {
-            register(keyCode: keyCode, modifiers: modifiers)
-        }
+        guard let stored = Self.storedHotKey(
+            keyCodeObject: UserDefaults.standard.object(forKey: "globalHotKeyKeyCode"),
+            modifiersObject: UserDefaults.standard.object(forKey: "globalHotKeyModifiers")
+        ) else { return }
+
+        register(keyCode: stored.keyCode, modifiers: stored.modifiers)
     }
     
     func keyString(keyCode: Int, modifiers: Int) -> String {

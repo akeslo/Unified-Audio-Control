@@ -71,6 +71,19 @@ class AudioDeviceManager: ObservableObject {
         propertySize > 0
     }
 
+    /// Decide whether a device exposes output streams, given the *result* of the
+    /// CoreAudio size query rather than the size alone.
+    ///
+    /// A failed query says nothing about the device, so it must answer "no". The
+    /// caller previously discarded the status and seeded `propertySize` to 256, which
+    /// meant a failure returned the seed — and the seed said "yes". Devices that
+    /// vanished mid-enumeration, or that have no output scope at all, were listed as
+    /// selectable outputs and could be made the system default output.
+    static func hasOutputStreams(status: OSStatus, propertySize: UInt32) -> Bool {
+        guard status == noErr else { return false }
+        return hasOutputStreams(propertySize: propertySize)
+    }
+
     /// A device is an aggregate device iff its transport type matches the aggregate constant.
     static func isAggregateTransportType(_ transportType: UInt32) -> Bool {
         transportType == kAudioDeviceTransportTypeAggregate
@@ -397,15 +410,21 @@ class AudioDeviceManager: ObservableObject {
     }
     
     private func isOutputDevice(deviceID: AudioDeviceID) -> Bool {
-        var propertySize: UInt32 = 256
+        // Seed to 0, not 256. The old seed was the answer whenever the query failed:
+        // AudioObjectGetPropertyDataSize leaves the inout untouched on error, and its
+        // status was discarded, so a device that vanished mid-enumeration or has no
+        // output scope at all reported 256 bytes of output streams and was offered as
+        // a selectable output. Microphones and input-only aggregates could be made the
+        // default output that way.
+        var propertySize: UInt32 = 0
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreams,
             mScope: kAudioDevicePropertyScopeOutput,
             mElement: kAudioObjectPropertyElementMain
         )
-        
-        AudioObjectGetPropertyDataSize(deviceID, &propertyAddress, 0, nil, &propertySize)
-        return AudioDeviceManager.hasOutputStreams(propertySize: propertySize)
+
+        let status = AudioObjectGetPropertyDataSize(deviceID, &propertyAddress, 0, nil, &propertySize)
+        return AudioDeviceManager.hasOutputStreams(status: status, propertySize: propertySize)
     }
     
     private func getDeviceName(deviceID: AudioDeviceID) -> String {

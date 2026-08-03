@@ -3,7 +3,11 @@ import Foundation
 /// Represents a GitHub release from the API
 struct GitHubRelease: Codable {
     let tagName: String
-    let name: String
+    /// Optional because the GitHub API returns `null` here for a release published
+    /// without a title. Declaring it non-optional made the whole decode throw, and
+    /// `UpdateManager` surfaced that as "The data couldn't be read because it is
+    /// missing" — a decoding error shown to the user in place of a valid release.
+    let name: String?
     let body: String?
     let htmlUrl: String
     let publishedAt: String

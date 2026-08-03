@@ -80,6 +80,38 @@ class DisplayManager: ObservableObject {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    /// Convert a raw DDC (current, max) pair into a 0...1 fraction.
+    ///
+    /// Returns nil when the pair cannot describe a fraction — a max of 0 is the one
+    /// that actually happens, since a flaky HDMI/DP DDC channel answers a read with
+    /// zeroes rather than failing outright. Dividing by it produced NaN (0/0) or +Inf,
+    /// which was stored straight into `DisplayInfo.brightness`, handed to the SwiftUI
+    /// Slider binding, and fed back into `UInt16(value * 100)` — and `UInt16(NaN)` is
+    /// an unconditional runtime trap, so a single bad DDC read crashed the app.
+    /// "Cannot tell" is made representable here so the caller falls back explicitly.
+    /// Extracted for unit testing (no CoreGraphics dependency).
+    static func ddcFraction(current: UInt16, max: UInt16) -> Float? {
+        guard max > 0 else { return nil }
+        let fraction = Float(current) / Float(max)
+        guard fraction.isFinite else { return nil }
+        return min(Swift.max(fraction, 0.0), 1.0)
+    }
+
+    /// Convert a 0...1 fraction into the 0...100 integer a DDC write expects.
+    ///
+    /// Clamps rather than trusting the caller: `UInt16(value * 100)` traps on NaN and
+    /// on anything negative or above 65535, and the value arrives from a Slider
+    /// binding whose backing store can hold a non-finite DDC read.
+    /// Extracted for unit testing (no CoreGraphics dependency).
+    static func ddcPercent(fromFraction value: Float) -> UInt16 {
+        // NaN has no position on the scale, so it cannot be clamped into one — it is
+        // rejected outright. Infinities do have a direction, so they clamp normally.
+        guard !value.isNaN else { return 0 }
+        if value <= 0 { return 0 }
+        if value >= 1 { return 100 }
+        return UInt16(value * 100)
+    }
+
     func setVisibility(uuid: String, visible: Bool) {
         print("DEBUG: setVisibility uuid=\(uuid) visible=\(visible)")
         var ignored = Array(ignoredDisplayUUIDs)
@@ -250,7 +282,7 @@ class DisplayManager: ObservableObject {
             DisplayServicesSetBrightness(displayID, value)
         } else {
 
-            let ddcValue = UInt16(value * 100)
+            let ddcValue = Self.ddcPercent(fromFraction: value)
             writeDDC(displayID: displayID, command: 0x10, value: ddcValue)
         }
         
@@ -268,14 +300,15 @@ class DisplayManager: ObservableObject {
             return brightness
         }
         
-        if let (current, max) = readDDC(displayID: displayID, command: 0x10) {
-            return Float(current) / Float(max)
+        if let (current, max) = readDDC(displayID: displayID, command: 0x10),
+           let fraction = Self.ddcFraction(current: current, max: max) {
+            return fraction
         }
         return 0.5
     }
     
     func setVolume(displayID: CGDirectDisplayID, value: Float) {
-        let ddcValue = UInt16(value * 100)
+        let ddcValue = Self.ddcPercent(fromFraction: value)
         writeDDC(displayID: displayID, command: 0x62, value: ddcValue)
         
         if let index = displays.firstIndex(where: { $0.id == displayID }) {
@@ -284,8 +317,9 @@ class DisplayManager: ObservableObject {
     }
     
     func getVolume(displayID: CGDirectDisplayID) -> Float {
-        if let (current, max) = readDDC(displayID: displayID, command: 0x62) {
-            return Float(current) / Float(max)
+        if let (current, max) = readDDC(displayID: displayID, command: 0x62),
+           let fraction = Self.ddcFraction(current: current, max: max) {
+            return fraction
         }
         return -1.0 // Indicate failure
     }
@@ -296,11 +330,17 @@ class DisplayManager: ObservableObject {
     private var writeDDCLastSavedValue: [CGDirectDisplayID: UInt16] = [:]
     
     private func writeDDC(displayID: CGDirectDisplayID, command: UInt8, value: UInt16) {
-        // Debounce: Update the next value to be written
-        writeDDCQueue.async(flags: .barrier) {
+        // Debounce: publish the next value to be written *before* waking the worker.
+        // This store used to be `async(flags: .barrier)`, which let the worker's own
+        // `writeDDCQueue.sync` win the race and read the previous value — at which
+        // point `guard value != lastValue` returned early and the user's newest slider
+        // position was never sent to the monitor, so the slider snapped back on the
+        // next refresh. The worker must not be able to observe a stale value it was
+        // dispatched specifically to write.
+        writeDDCQueue.sync(flags: .barrier) {
             self.writeDDCNextValue[displayID] = value
         }
-        
+
         // Trigger the write asynchronously
         DispatchQueue.global(qos: .userInitiated).async {
             self.asyncPerformWriteDDCValues(displayID: displayID, command: command)
