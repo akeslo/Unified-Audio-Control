@@ -11,3 +11,6 @@ UnifiedAudioControl.zip
 # a `git add` from re-adding it until this rule existed.
 UnifiedAudioControl.app/
 Assets/AppIcon.iconset/
+
+# Written by the claude-md-updater hook after every commit; local notes, never shared.
+CLAUDE.local.md
