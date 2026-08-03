@@ -53,17 +53,28 @@ class UpdateManager: ObservableObject {
                 self.lastCheckDate = Date()
                 UserDefaults.standard.set(Date(), forKey: "lastUpdateCheck")
                 
-                // Compare versions
-                if let currentVer = SemanticVersion(string: currentVersion),
-                   let latestVer = SemanticVersion(string: release.version) {
-                    self.updateAvailable = latestVer > currentVer
-                    
+                // Compare versions. A nil verdict means one of the two strings did not
+                // parse — report it instead of falling through, which used to leave a
+                // stale `updateAvailable` from an earlier check standing with no error
+                // shown anywhere in the UI.
+                if let upgrade = SemanticVersion.upgradeAvailable(
+                    current: currentVersion,
+                    latest: release.version
+                ) {
+                    self.updateAvailable = upgrade
+
                     // Show notification if update is available and not silent
                     if !silent && self.updateAvailable {
                         self.showUpdateNotification()
                     }
+                } else {
+                    self.updateAvailable = false
+                    self.errorMessage = UpdateError.unreadableVersion(
+                        current: currentVersion,
+                        latest: release.version
+                    ).localizedDescription
                 }
-                
+
                 self.isChecking = false
             }
         } catch {
@@ -134,7 +145,8 @@ enum UpdateError: LocalizedError {
     case invalidResponse
     case httpError(statusCode: Int)
     case noStableRelease
-    
+    case unreadableVersion(current: String, latest: String)
+
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
@@ -143,6 +155,8 @@ enum UpdateError: LocalizedError {
             return "Server returned error code \(code)"
         case .noStableRelease:
             return "No stable release available"
+        case .unreadableVersion(let current, let latest):
+            return "Could not compare versions (installed \"\(current)\", released \"\(latest)\")"
         }
     }
 }

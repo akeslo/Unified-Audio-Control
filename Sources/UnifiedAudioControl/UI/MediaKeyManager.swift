@@ -41,27 +41,38 @@ class MediaKeyManager {
             return false
         }
 
-        eventTap = tap
-        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-
-        if let source = runLoopSource {
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
-            CGEvent.tapEnable(tap: tap, enable: true)
+        // Only publish `eventTap` once the tap is actually wired into a run loop.
+        // Assigning it first meant a nil run-loop source left a non-nil `eventTap`
+        // behind: `start()` returned true (so the caller logged no warning) and every
+        // later call short-circuited on the `eventTap == nil` guard above, leaving
+        // media keys permanently dead with no way to recover short of a relaunch.
+        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            print("MediaKeyManager: Failed to create run loop source for the event tap.")
+            CFMachPortInvalidate(tap)
+            return false
         }
+
+        eventTap = tap
+        runLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
 
         return true
     }
     
     func stop() {
+        // Detach the source from the run loop before invalidating the port it was
+        // created from — the reverse order leaves the run loop briefly holding a
+        // source backed by a dead mach port.
+        if let source = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+            runLoopSource = nil
+        }
+
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
             CFMachPortInvalidate(tap)
             eventTap = nil
-        }
-        
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
-            runLoopSource = nil
         }
     }
     
@@ -92,8 +103,6 @@ class MediaKeyManager {
         let keyCode = (data1 & 0x00FF0000) >> 16
         let keyFlags = data1 & 0x0000FFFF
         let keyDown = ((keyFlags & 0xFF00) >> 8) == 0x0A
-        
-        // Only act on key down
         
         // Only act on key down
         guard keyDown else {

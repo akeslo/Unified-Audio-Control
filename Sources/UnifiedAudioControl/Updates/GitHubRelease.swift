@@ -101,4 +101,19 @@ struct SemanticVersion: Comparable {
     var description: String {
         "\(major).\(minor).\(patch)"
     }
+
+    /// Decides whether `latest` is an upgrade over `current`.
+    ///
+    /// Returns `nil` when either string fails to parse. `nil` means "cannot tell",
+    /// which is deliberately distinct from `false` ("no upgrade"): the caller must
+    /// surface an error rather than leave a previous verdict standing. Since the
+    /// parser became strict (it now refuses "1.x.2" instead of mis-reading it as
+    /// 1.2.0), an unparseable tag is a reachable outcome, not a theoretical one.
+    static func upgradeAvailable(current: String, latest: String) -> Bool? {
+        guard let currentVer = SemanticVersion(string: current),
+              let latestVer = SemanticVersion(string: latest) else {
+            return nil
+        }
+        return latestVer > currentVer
+    }
 }

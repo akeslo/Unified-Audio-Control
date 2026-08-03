@@ -83,4 +83,23 @@ final class SemanticVersionTests: XCTestCase {
     func testDescriptionAlwaysRendersThreeComponents() {
         XCTAssertEqual(SemanticVersion(string: "2.5")?.description, "2.5.0")
     }
+
+    // MARK: - upgradeAvailable
+
+    func testUpgradeAvailableTrueWhenLatestIsNewer() {
+        XCTAssertEqual(SemanticVersion.upgradeAvailable(current: "1.0.4", latest: "v1.0.5"), true)
+    }
+
+    func testUpgradeAvailableFalseWhenLatestIsOlderOrEqual() {
+        XCTAssertEqual(SemanticVersion.upgradeAvailable(current: "1.0.5", latest: "1.0.4"), false)
+        XCTAssertEqual(SemanticVersion.upgradeAvailable(current: "1.0.5", latest: "v1.0.5"), false)
+    }
+
+    func testUpgradeAvailableIsNilWhenEitherSideIsUnparseable() {
+        // nil is "cannot tell", not "no upgrade" — the caller must surface an error
+        // rather than leave a previous verdict standing.
+        XCTAssertNil(SemanticVersion.upgradeAvailable(current: "1.0.4", latest: "nightly"))
+        XCTAssertNil(SemanticVersion.upgradeAvailable(current: "", latest: "1.0.5"))
+        XCTAssertNil(SemanticVersion.upgradeAvailable(current: "1.x.2", latest: "1.0.5"))
+    }
 }
