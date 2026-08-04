@@ -20,14 +20,30 @@ class UpdateManager: ObservableObject {
     // User preferences (stored in UserDefaults)
     @Published var autoCheckEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(autoCheckEnabled, forKey: "autoCheckForUpdates")
+            UserDefaults.standard.set(autoCheckEnabled, forKey: UpdateManager.autoCheckDefaultsKey)
         }
     }
     
+    /// Key for the "check on launch" preference.
+    static let autoCheckDefaultsKey = "autoCheckForUpdates"
+
+    /// Seeds the launch-check preference to on for installs that have never set it.
+    ///
+    /// `UserDefaults.bool(forKey:)` returns false for an absent key, so a fresh
+    /// install started with the updater silently off: the README advertises a
+    /// built-in updater, the app runs the launch check behind
+    /// `autoCheckEnabled == true`, and nothing ever ran it until the user found the
+    /// toggle in Preferences. `register(defaults:)` supplies a value only when the
+    /// key is absent, so anyone who deliberately turned it off keeps it off.
+    static func registerDefaults(_ defaults: UserDefaults = .standard) {
+        defaults.register(defaults: [autoCheckDefaultsKey: true])
+    }
+
     private init() {
         // Load preferences from UserDefaults
-        self.autoCheckEnabled = UserDefaults.standard.bool(forKey: "autoCheckForUpdates")
-        
+        UpdateManager.registerDefaults()
+        self.autoCheckEnabled = UserDefaults.standard.bool(forKey: UpdateManager.autoCheckDefaultsKey)
+
         if let lastCheck = UserDefaults.standard.object(forKey: "lastUpdateCheck") as? Date {
             self.lastCheckDate = lastCheck
         }
