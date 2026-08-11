@@ -238,18 +238,18 @@ class BluetoothManager: ObservableObject {
     
     private func performConnection(btDevice: IOBluetoothDevice, name: String) {
         // Run connection attempt on background thread to avoid blocking UI
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             print("BluetoothManager: Initiating connection to \(name) in background...")
-            
+
             // Open connection to the device
             // This triggers the macOS Bluetooth system to attempt connection
             // This call can block for several seconds
             let result = btDevice.openConnection()
-            
+
             DispatchQueue.main.async {
                 if result == kIOReturnSuccess {
                     print("BluetoothManager: Connection initiated to \(name)")
-                    
+
                     // Refresh devices after a short delay to update UI
                     // We wait a bit longer to ensure the system registers the state change
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
@@ -257,7 +257,7 @@ class BluetoothManager: ObservableObject {
                     }
                 } else {
                     print("BluetoothManager: Failed to connect to \(name), error: \(result)")
-                    self.onConnectionFailed?()
+                    self?.onConnectionFailed?()
                 }
             }
         }
