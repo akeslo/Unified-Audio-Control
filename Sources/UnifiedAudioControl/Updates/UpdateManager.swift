@@ -134,6 +134,10 @@ class UpdateManager: ObservableObject {
         guard let release = latestRelease,
               let asset = release.appAsset,
               let downloadURL = URL(string: asset.browserDownloadUrl) else {
+            // Same silent-failure shape documented elsewhere in this class: without
+            // this, clicking "Download Update" when the release has no .zip asset (or
+            // no release has been fetched yet) does nothing and shows no error.
+            errorMessage = UpdateError.missingDownloadAsset.localizedDescription
             return
         }
         
@@ -162,6 +166,7 @@ enum UpdateError: LocalizedError {
     case httpError(statusCode: Int)
     case noStableRelease
     case unreadableVersion(current: String, latest: String)
+    case missingDownloadAsset
 
     var errorDescription: String? {
         switch self {
@@ -173,6 +178,8 @@ enum UpdateError: LocalizedError {
             return "No stable release available"
         case .unreadableVersion(let current, let latest):
             return "Could not compare versions (installed \"\(current)\", released \"\(latest)\")"
+        case .missingDownloadAsset:
+            return "No downloadable .zip asset found in the latest release"
         }
     }
 }
