@@ -354,7 +354,10 @@ class AudioDeviceManager: ObservableObject {
     }
     
     func selectDevice(deviceID: AudioDeviceID) {
-        setOutputDevice(newDeviceID: deviceID)
+        guard setOutputDevice(newDeviceID: deviceID) else {
+            print("AudioDeviceManager: Failed to set default output device to \(deviceID)")
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.updateCurrentState()
         }
@@ -369,22 +372,34 @@ class AudioDeviceManager: ObservableObject {
     
     func setVolume(_ newVolume: Float) {
         guard selectedDeviceID != kAudioDeviceUnknown else { return }
-        setDeviceVolume(deviceID: selectedDeviceID, volume: newVolume)
+        // Only reflect the change in the UI/HUD once CoreAudio actually accepted it.
+        // The set call used to be fired and its result discarded, so a rejected write
+        // (device gone, permission denied, non-settable channel) still left the slider
+        // and HUD showing the new value while the hardware stayed at the old one —
+        // the same "operation that could not complete reported success" shape already
+        // fixed in UpdateManager.checkForUpdates and MediaKeyManager.start.
+        guard setDeviceVolume(deviceID: selectedDeviceID, volume: newVolume) else {
+            print("AudioDeviceManager: Failed to set volume on device \(selectedDeviceID)")
+            return
+        }
         self.volume = newVolume
-        
+
         HUDManager.shared.show(type: .volume, value: newVolume)
-        
+
         if newVolume > 0 && isMuted {
             toggleMute()
         }
     }
-    
+
     func toggleMute() {
         guard selectedDeviceID != kAudioDeviceUnknown else { return }
         let newMuteState = !isMuted
-        setDeviceMute(deviceID: selectedDeviceID, isMute: newMuteState)
+        guard setDeviceMute(deviceID: selectedDeviceID, isMute: newMuteState) else {
+            print("AudioDeviceManager: Failed to set mute state on device \(selectedDeviceID)")
+            return
+        }
         self.isMuted = newMuteState
-        
+
         // Show 0 volume if muted, else current volume
         HUDManager.shared.show(type: .volume, value: newMuteState ? 0 : volume)
     }
@@ -474,7 +489,8 @@ class AudioDeviceManager: ObservableObject {
         return deviceID
     }
     
-    private func setOutputDevice(newDeviceID: AudioDeviceID) {
+    @discardableResult
+    private func setOutputDevice(newDeviceID: AudioDeviceID) -> Bool {
         var deviceID = newDeviceID
         let propertySize = UInt32(MemoryLayout<AudioDeviceID>.size)
         var propertyAddress = AudioObjectPropertyAddress(
@@ -482,8 +498,9 @@ class AudioDeviceManager: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        
-        AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &propertyAddress, 0, nil, propertySize, &deviceID)
+
+        let status = AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &propertyAddress, 0, nil, propertySize, &deviceID)
+        return status == noErr
     }
     
     private func getDeviceVolume(deviceID: AudioDeviceID) -> Float {
@@ -549,34 +566,43 @@ class AudioDeviceManager: ObservableObject {
         return false
     }
     
-    private func setDeviceVolume(deviceID: AudioDeviceID, volume: Float) {
+    @discardableResult
+    private func setDeviceVolume(deviceID: AudioDeviceID, volume: Float) -> Bool {
         var newVolume = volume
         let size = UInt32(MemoryLayout<Float32>.size)
-        
+
         // Try Master
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyVolumeScalar,
             mScope: kAudioDevicePropertyScopeOutput,
             mElement: kAudioObjectPropertyElementMain
         )
-        
+
+        var succeeded = false
         if AudioObjectHasProperty(deviceID, &propertyAddress) {
-            AudioObjectSetPropertyData(deviceID, &propertyAddress, 0, nil, size, &newVolume)
+            succeeded = AudioObjectSetPropertyData(deviceID, &propertyAddress, 0, nil, size, &newVolume) == noErr
         } else {
             // Set for channels 1 and 2
             propertyAddress.mElement = 1
-            AudioObjectSetPropertyData(deviceID, &propertyAddress, 0, nil, size, &newVolume)
+            let status1 = AudioObjectSetPropertyData(deviceID, &propertyAddress, 0, nil, size, &newVolume)
             propertyAddress.mElement = 2
-            AudioObjectSetPropertyData(deviceID, &propertyAddress, 0, nil, size, &newVolume)
+            let status2 = AudioObjectSetPropertyData(deviceID, &propertyAddress, 0, nil, size, &newVolume)
+            succeeded = status1 == noErr || status2 == noErr
         }
-        
-        // Handle Aggregate Devices (Simplified recursion)
+
+        // Handle Aggregate Devices (Simplified recursion). Success is "at least one
+        // sub-device accepted the write" — matches AudioDeviceManager.anySettable,
+        // the same criterion already used to decide whether an aggregate is controllable.
         if isAggregateDevice(deviceID: deviceID) {
             let subDevices = getAggregateDeviceSubDeviceList(deviceID: deviceID)
             for subDevice in subDevices {
-                setDeviceVolume(deviceID: subDevice, volume: volume)
+                if setDeviceVolume(deviceID: subDevice, volume: volume) {
+                    succeeded = true
+                }
             }
         }
+
+        return succeeded
     }
     
     private func isDeviceMuted(deviceID: AudioDeviceID) -> Bool {
@@ -592,7 +618,8 @@ class AudioDeviceManager: ObservableObject {
         return muted == 1
     }
     
-    private func setDeviceMute(deviceID: AudioDeviceID, isMute: Bool) {
+    @discardableResult
+    private func setDeviceMute(deviceID: AudioDeviceID, isMute: Bool) -> Bool {
         var muted: UInt32 = isMute ? 1 : 0
         let size = UInt32(MemoryLayout<UInt32>.size)
         var propertyAddress = AudioObjectPropertyAddress(
@@ -600,15 +627,19 @@ class AudioDeviceManager: ObservableObject {
             mScope: kAudioDevicePropertyScopeOutput,
             mElement: kAudioObjectPropertyElementMain
         )
-        
-        AudioObjectSetPropertyData(deviceID, &propertyAddress, 0, nil, size, &muted)
-        
+
+        var succeeded = AudioObjectSetPropertyData(deviceID, &propertyAddress, 0, nil, size, &muted) == noErr
+
         if isAggregateDevice(deviceID: deviceID) {
             let subDevices = getAggregateDeviceSubDeviceList(deviceID: deviceID)
             for subDevice in subDevices {
-                setDeviceMute(deviceID: subDevice, isMute: isMute)
+                if setDeviceMute(deviceID: subDevice, isMute: isMute) {
+                    succeeded = true
+                }
             }
         }
+
+        return succeeded
     }
     
     private func isAggregateDevice(deviceID: AudioDeviceID) -> Bool {
