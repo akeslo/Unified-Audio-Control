@@ -113,6 +113,12 @@ struct GeneralSettingsView: View {
                                 print("DEBUG: Successfully unregistered for launch at login")
                             } catch {
                                 print("DEBUG: Failed to unregister for launch at login: \(error)")
+                                // Revert if failed. Without this the toggle shows "off"
+                                // while SMAppService is still actually registered, the
+                                // same silent-failure shape as the register() branch
+                                // above (and as UpdateManager/MediaKeyManager, see
+                                // CLAUDE.local.md § Conventions).
+                                launchAtLogin = true
                             }
                         }
                     }
