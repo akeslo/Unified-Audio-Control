@@ -38,6 +38,16 @@ class HotKeyManager: ObservableObject {
             saveHotKey(keyCode: keyCode, modifiers: modifiers)
         } else {
             print("Failed to register hotkey: \(status)")
+            // `register()` always calls `unregister()` first, so a failed
+            // RegisterEventHotKey call leaves nothing bound at the OS level.
+            // Previously `currentHotKey` (and the persisted default) were left
+            // untouched on failure, so re-recording an existing shortcut with a
+            // combo the OS refused (already claimed, etc.) showed the *old*
+            // shortcut as still active in Preferences while it silently did
+            // nothing when pressed. Clear both so the UI reflects reality.
+            currentHotKey = nil
+            UserDefaults.standard.removeObject(forKey: "globalHotKeyKeyCode")
+            UserDefaults.standard.removeObject(forKey: "globalHotKeyModifiers")
         }
     }
     
