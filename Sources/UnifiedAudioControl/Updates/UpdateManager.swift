@@ -144,11 +144,17 @@ class UpdateManager: ObservableObject {
         // Open the download URL in the default browser
         NSWorkspace.shared.open(downloadURL)
         
-        // Also open the release page for instructions
+        // Also open the release page for instructions. The download itself already
+        // succeeded above, so an unparseable htmlUrl is logged rather than surfaced
+        // as errorMessage — this codebase's recurring `if let`-with-no-`else` shape
+        // (see CLAUDE.local.md § Conventions), applied here without overwriting the
+        // success state of the primary action.
         if let releaseURL = URL(string: release.htmlUrl) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 NSWorkspace.shared.open(releaseURL)
             }
+        } else {
+            NSLog("UpdateManager: could not parse release htmlUrl \"\(release.htmlUrl)\"; release notes page not opened")
         }
     }
     
