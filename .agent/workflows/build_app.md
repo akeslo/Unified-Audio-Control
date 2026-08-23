@@ -52,38 +52,26 @@ rm -rf "Assets/AppIcon.iconset"
 5. Create Info.plist
 // turbo
 ```bash
-cat > UnifiedAudioControl.app/Contents/Info.plist <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>UnifiedAudioControl</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.akeslo.unifiedaudiocontrol</string>
-    <key>CFBundleName</key>
-    <string>UnifiedAudioControl</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleShortVersionString</key>
-    <string>$VERSION</string>
-    <key>CFBundleVersion</key>
-    <string>$VERSION</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>Unified Audio Control needs Bluetooth access to detect and connect to your paired devices.</string>
-    <key>NSBluetoothPeripheralUsageDescription</key>
-    <string>Unified Audio Control needs Bluetooth access to detect and connect to your paired devices.</string>
-</dict>
-</plist>
-EOF
+# Using echo (not a heredoc) to avoid heredoc hangs — see master_build.sh.
+PLIST="UnifiedAudioControl.app/Contents/Info.plist"
+echo '<?xml version="1.0" encoding="UTF-8"?>' > "$PLIST"
+echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> "$PLIST"
+echo '<plist version="1.0">' >> "$PLIST"
+echo '<dict>' >> "$PLIST"
+echo '    <key>CFBundleExecutable</key><string>UnifiedAudioControl</string>' >> "$PLIST"
+echo '    <key>CFBundleIdentifier</key><string>com.akeslo.unifiedaudiocontrol</string>' >> "$PLIST"
+echo '    <key>CFBundleName</key><string>UnifiedAudioControl</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleSignature</key><string>????</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>' >> "$PLIST"
+echo '    <key>CFBundleShortVersionString</key><string>'$VERSION'</string>' >> "$PLIST"
+echo '    <key>CFBundleVersion</key><string>'$VERSION'</string>' >> "$PLIST"
+echo '    <key>LSUIElement</key><true/>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSBluetoothAlwaysUsageDescription</key><string>Unified Audio Control needs Bluetooth access to detect and connect to your paired devices.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key><string>Unified Audio Control needs Bluetooth access to detect and connect to your paired devices.</string>
+</dict>' >> "$PLIST"
+echo '</plist>' >> "$PLIST"
 ```
 
 6. Ad-hoc sign the app
