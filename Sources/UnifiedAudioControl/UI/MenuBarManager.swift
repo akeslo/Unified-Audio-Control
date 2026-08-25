@@ -76,6 +76,11 @@ class MenuBarManager: NSObject {
             // Flash warning icon for 5 seconds
             self?.showTemporaryIcon(name: "exclamationmark.triangle.fill", duration: 5.0)
         }
+
+        // Handle Bluetooth disconnection failures the same way
+        bluetoothManager.onDisconnectionFailed = { [weak self] in
+            self?.showTemporaryIcon(name: "exclamationmark.triangle.fill", duration: 5.0)
+        }
     }
 
     private func updateCurrentVolumeAndIcon(volume: Float, isMuted: Bool, canControlVolume: Bool, selectedDeviceID: AudioDevice.ID, displays: [DisplayInfo]) {

@@ -84,6 +84,9 @@ class BluetoothManager: ObservableObject {
     
     /// Callback for connection failures
     var onConnectionFailed: (() -> Void)?
+
+    /// Callback for disconnection failures
+    var onDisconnectionFailed: (() -> Void)?
     
     /// Refreshes the list of paired Bluetooth audio devices
     func refreshDevices() {
@@ -280,7 +283,11 @@ class BluetoothManager: ObservableObject {
                 self?.refreshDevices()
             }
         } else {
+            // Same silent-failure shape connect() already guards against via
+            // onConnectionFailed: printing to the console is invisible to the user,
+            // so a failed disconnect looked identical to a successful one in the UI.
             print("BluetoothManager: Failed to disconnect from \(device.name), error: \(result)")
+            onDisconnectionFailed?()
         }
     }
     
