@@ -14,3 +14,8 @@ Assets/AppIcon.iconset/
 
 # Written by the claude-md-updater hook after every commit; local notes, never shared.
 CLAUDE.local.md
+
+# Per-machine agent scratch (.cc-writes, agent-memory, worktrees). Re-created on its own
+# every session, so leaving it untracked meant every `git status` here opened dirty and
+# every automated sweep had to decide afresh whether that dirt was real work.
+.claude/
