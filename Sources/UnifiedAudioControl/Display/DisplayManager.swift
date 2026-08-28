@@ -374,7 +374,15 @@ class DisplayManager: ObservableObject {
                 service = arm64Services[displayID]
             }
             if let service = service {
-                _ = Arm64DDC.write(service: service, command: command, value: value)
+                // setBrightness/setVolume already updated `displays[index]` optimistically
+                // before this async write even started, so a rejected write here has no
+                // path back to the UI today (see CLAUDE.local.md § Conventions on the
+                // same optimistic-update shape fixed for CoreAudio in f8da49c). Logging
+                // is the minimal, non-invasive step: at least the failure is discoverable
+                // instead of silently discarded via `_ = ...`.
+                if !Arm64DDC.write(service: service, command: command, value: value) {
+                    NSLog("DisplayManager: DDC write failed (arm64) displayID=\(displayID) command=0x\(String(command, radix: 16)) value=\(value)")
+                }
             }
         } else {
             var ddc: IntelDDC?
@@ -382,7 +390,9 @@ class DisplayManager: ObservableObject {
                 ddc = intelDDCs[displayID]
             }
             if let ddc = ddc {
-                _ = ddc.write(command: command, value: value)
+                if !ddc.write(command: command, value: value) {
+                    NSLog("DisplayManager: DDC write failed (intel) displayID=\(displayID) command=0x\(String(command, radix: 16)) value=\(value)")
+                }
             }
         }
     }
