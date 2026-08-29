@@ -313,14 +313,12 @@ struct MenuBarView: View {
                                  if let btDevice = bluetoothManager.recentDevices.first(where: {
                                      device.uid.contains($0.id) || device.name == $0.name
                                  }) {
-                                     print("DEBUG: Active Bluetooth device selected. Ensuring connection...")
                                      bluetoothManager.connect(device: btDevice)
                                  }
                              }
                         }
                         // 2. Try to find in Bluetooth devices (Disconnected/Inactive)
                         else if let btDevice = bluetoothManager.recentDevices.first(where: { $0.id == newValue }) {
-                            print("DEBUG: Inactive/Disconnected Bluetooth device selected. Connecting...")
                             bluetoothManager.connect(device: btDevice)
                         }
                     }

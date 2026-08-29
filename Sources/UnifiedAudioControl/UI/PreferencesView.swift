@@ -101,18 +101,14 @@ struct GeneralSettingsView: View {
                         if newValue {
                             do {
                                 try SMAppService.mainApp.register()
-                                print("DEBUG: Successfully registered for launch at login")
                             } catch {
-                                print("DEBUG: Failed to register for launch at login: \(error)")
                                 // Revert if failed
                                 launchAtLogin = false
                             }
                         } else {
                             do {
                                 try SMAppService.mainApp.unregister()
-                                print("DEBUG: Successfully unregistered for launch at login")
                             } catch {
-                                print("DEBUG: Failed to unregister for launch at login: \(error)")
                                 // Revert if failed. Without this the toggle shows "off"
                                 // while SMAppService is still actually registered, the
                                 // same silent-failure shape as the register() branch

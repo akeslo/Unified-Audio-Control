@@ -113,10 +113,8 @@ class DisplayManager: ObservableObject {
     }
 
     func setVisibility(uuid: String, visible: Bool) {
-        print("DEBUG: setVisibility uuid=\(uuid) visible=\(visible)")
         var ignored = Array(ignoredDisplayUUIDs)
         ignored = Self.toggledIgnoredDisplayUUIDs(ignored, uuid: uuid, visible: visible)
-        print("DEBUG: New ignored list: \(ignored)")
         self.ignoredDisplayUUIDs = Set(ignored)
     }
     
@@ -229,12 +227,10 @@ class DisplayManager: ObservableObject {
     
     private func getDisplayUUID(displayID: CGDirectDisplayID) -> String {
         guard let unmanaged = CGDisplayCreateUUIDFromDisplayID(displayID) else {
-            print("DEBUG: Could not get UUID for display \(displayID)")
             return ""
         }
         let uuid = unmanaged.takeRetainedValue()
         let uuidString = CFUUIDCreateString(nil, uuid) as String
-        print("DEBUG: Display \(displayID) -> UUID \(uuidString)")
         return uuidString
     }
     
