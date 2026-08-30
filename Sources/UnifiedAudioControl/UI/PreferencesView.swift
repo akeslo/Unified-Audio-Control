@@ -73,7 +73,8 @@ struct PreferencesView: View {
 struct GeneralSettingsView: View {
     @AppStorage(PreferencesKeys.launchAtLogin) var launchAtLogin = false
     @AppStorage(PreferencesKeys.showHUD) private var showHUD = true
-    
+    @State private var launchAtLoginErrorMessage: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 16) {
@@ -101,13 +102,16 @@ struct GeneralSettingsView: View {
                         if newValue {
                             do {
                                 try SMAppService.mainApp.register()
+                                launchAtLoginErrorMessage = nil
                             } catch {
                                 // Revert if failed
                                 launchAtLogin = false
+                                launchAtLoginErrorMessage = error.localizedDescription
                             }
                         } else {
                             do {
                                 try SMAppService.mainApp.unregister()
+                                launchAtLoginErrorMessage = nil
                             } catch {
                                 // Revert if failed. Without this the toggle shows "off"
                                 // while SMAppService is still actually registered, the
@@ -115,20 +119,27 @@ struct GeneralSettingsView: View {
                                 // above (and as UpdateManager/MediaKeyManager, see
                                 // CLAUDE.local.md § Conventions).
                                 launchAtLogin = true
+                                launchAtLoginErrorMessage = error.localizedDescription
                             }
                         }
                     }
                 ))
                 .toggleStyle(.checkbox)
-                
+
                 Toggle("Show HUD Overlays", isOn: $showHUD)
                     .toggleStyle(.checkbox)
-                
+
                 // Add more general settings here as needed
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
-            
+
+            if let launchAtLoginErrorMessage {
+                Text(launchAtLoginErrorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
             Spacer()
         }
         .padding()
