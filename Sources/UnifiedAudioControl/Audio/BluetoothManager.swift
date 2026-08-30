@@ -218,7 +218,11 @@ class BluetoothManager: ObservableObject {
     /// Attempts to connect to a Bluetooth device
     func connect(device: BluetoothAudioDevice) {
         guard let btDevice = IOBluetoothDevice(addressString: device.id) else {
+            // Same silent-failure shape as the openConnection() failure path below:
+            // printing alone left the UI showing no feedback at all when the device
+            // couldn't even be resolved, which is worse than a failed connect attempt.
             print("BluetoothManager: Could not find device with address \(device.id)")
+            onConnectionFailed?()
             return
         }
         
@@ -270,6 +274,7 @@ class BluetoothManager: ObservableObject {
     func disconnect(device: BluetoothAudioDevice) {
         guard let btDevice = IOBluetoothDevice(addressString: device.id) else {
             print("BluetoothManager: Could not find device with address \(device.id)")
+            onDisconnectionFailed?()
             return
         }
         

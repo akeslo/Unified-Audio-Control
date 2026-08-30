@@ -40,6 +40,20 @@ Unified Audio Control is a native Swift/SwiftUI menu bar utility for macOS that 
 
 No third-party audio drivers are required—everything relies on CoreAudio and the bundled DDC helper.
 
+## Troubleshooting
+
+### Build fails during version tag parsing or update checks
+If the build fails with an error about parsing version tags or checking for updates, ensure `master_build.sh` is up to date with the latest `Package.swift` version. The version string must follow semantic versioning (`X.Y.Z`); tags with extra metadata (e.g., `v1.0.3-beta`) are rejected by the parser.
+
+### Info.plist is out of sync
+The build process synchronizes `Info.plist` between the app bundle and the workflow documentation in `build_app.md`. If you see errors about missing or mismatched plist keys during build, run `./master_build.sh` to regenerate both from the canonical source.
+
+### Update checker is not running on launch
+The app defaults to checking GitHub Releases on startup for newer versions. If you see update-check errors in the console, ensure you have network access and that your GitHub API connection is stable. The check runs asynchronously and does not block app startup.
+
+### Build artifacts are cluttering the repository
+The `.gitignore` rule excludes `UnifiedAudioControl.app/` and build intermediates. If you see the app binary appearing in `git status`, verify that `.gitignore` has not been accidentally modified and that you are not using `git add -f` to force-track build products.
+
 ## Licensing & Credits
 - **MonitorControl** (MIT License) – DDC/CI stack for both IntelDDC and Arm64DDC plus supporting helpers.
 - **MultiSoundChanger** (Apache License 2.0) – Aggregate-device handling ideas and UI inspiration for audio switching.
