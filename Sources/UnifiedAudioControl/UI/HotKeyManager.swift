@@ -33,7 +33,23 @@ class HotKeyManager: ObservableObject {
         let status = RegisterEventHotKey(UInt32(keyCode), carbonModifiers, hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
         
         if status == noErr {
-            installEventHandler()
+            guard installEventHandler() else {
+                // RegisterEventHotKey succeeded but InstallEventHandler did not, so the
+                // OS-level hotkey is bound yet nothing is listening for its pressed
+                // event — toggleHandler never fires. The same discarded-status shape
+                // documented elsewhere in this codebase (see CLAUDE.local.md §
+                // Conventions): reporting success here would leave Preferences showing
+                // an active shortcut that silently does nothing when pressed. Undo the
+                // OS-level registration and clear state exactly as the RegisterEventHotKey
+                // failure branch below does.
+                print("Failed to install hotkey event handler")
+                UnregisterEventHotKey(hotKeyRef)
+                hotKeyRef = nil
+                currentHotKey = nil
+                UserDefaults.standard.removeObject(forKey: "globalHotKeyKeyCode")
+                UserDefaults.standard.removeObject(forKey: "globalHotKeyModifiers")
+                return
+            }
             currentHotKey = (keyCode, modifiers)
             saveHotKey(keyCode: keyCode, modifiers: modifiers)
         } else {
@@ -59,17 +75,21 @@ class HotKeyManager: ObservableObject {
         // Don't remove event handler as we might want to register again
     }
     
-    private func installEventHandler() {
-        guard eventHandler == nil else { return }
-        
+    /// Returns whether the handler is installed and ready (including the case where
+    /// it was already installed from an earlier successful call).
+    @discardableResult
+    private func installEventHandler() -> Bool {
+        guard eventHandler == nil else { return true }
+
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        
+
         let handler: EventHandlerUPP = { _, _, _ in
             HotKeyManager.shared.toggleHandler?()
             return noErr
         }
-        
-        InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, nil, &eventHandler)
+
+        let status = InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, nil, &eventHandler)
+        return status == noErr
     }
     
     private func saveHotKey(keyCode: Int, modifiers: Int) {
