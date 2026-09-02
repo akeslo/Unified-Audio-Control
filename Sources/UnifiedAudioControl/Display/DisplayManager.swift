@@ -370,14 +370,9 @@ class DisplayManager: ObservableObject {
                 service = arm64Services[displayID]
             }
             if let service = service {
-                // setBrightness/setVolume already updated `displays[index]` optimistically
-                // before this async write even started, so a rejected write here has no
-                // path back to the UI today (see CLAUDE.local.md § Conventions on the
-                // same optimistic-update shape fixed for CoreAudio in f8da49c). Logging
-                // is the minimal, non-invasive step: at least the failure is discoverable
-                // instead of silently discarded via `_ = ...`.
                 if !Arm64DDC.write(service: service, command: command, value: value) {
                     NSLog("DisplayManager: DDC write failed (arm64) displayID=\(displayID) command=0x\(String(command, radix: 16)) value=\(value)")
+                    revertOptimisticUpdate(displayID: displayID, command: command)
                 }
             }
         } else {
@@ -388,7 +383,32 @@ class DisplayManager: ObservableObject {
             if let ddc = ddc {
                 if !ddc.write(command: command, value: value) {
                     NSLog("DisplayManager: DDC write failed (intel) displayID=\(displayID) command=0x\(String(command, radix: 16)) value=\(value)")
+                    revertOptimisticUpdate(displayID: displayID, command: command)
                 }
+            }
+        }
+    }
+
+    /// setBrightness/setVolume update `displays[index]` optimistically before the
+    /// debounced async write even starts, so a rejected write used to leave the
+    /// slider showing a value the monitor never accepted — the same
+    /// "operation that could not complete reported success" shape already fixed for
+    /// CoreAudio writes in AudioDeviceManager (f8da49c). Re-read the monitor's actual
+    /// current value and correct the published model back to it on the main thread.
+    private func revertOptimisticUpdate(displayID: CGDirectDisplayID, command: UInt8) {
+        guard let (current, max) = readDDC(displayID: displayID, command: command),
+              let fraction = Self.ddcFraction(current: current, max: max) else {
+            return
+        }
+        DispatchQueue.main.async {
+            guard let index = self.displays.firstIndex(where: { $0.id == displayID }) else { return }
+            switch command {
+            case 0x10:
+                self.displays[index].brightness = fraction
+            case 0x62:
+                self.displays[index].volume = fraction
+            default:
+                break
             }
         }
     }
