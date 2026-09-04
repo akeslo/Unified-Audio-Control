@@ -167,6 +167,34 @@ class HotKeyManager: ObservableObject {
         case kVK_ANSI_8: string += "8"
         case kVK_ANSI_9: string += "9"
         case kVK_Space: string += "Space"
+        // ShortcutRecorder.onKeyDown records the raw keyCode of whatever key the user
+        // presses (any key except Escape), not just letters/digits/space — so a
+        // shortcut bound to one of the keys below was fully functional but rendered as
+        // an unhelpful "?" here, leaving Preferences unable to tell the user which key
+        // is actually wired to the toggle. Covering the keys people commonly pick for
+        // a global hotkey (arrows, function keys, Tab/Return/Delete) closes that gap;
+        // anything still unmapped intentionally keeps the "?" fallback.
+        case kVK_LeftArrow: string += "←"
+        case kVK_RightArrow: string += "→"
+        case kVK_UpArrow: string += "↑"
+        case kVK_DownArrow: string += "↓"
+        case kVK_Return: string += "Return"
+        case kVK_Tab: string += "Tab"
+        case kVK_Delete: string += "Delete"
+        case kVK_ForwardDelete: string += "Forward Delete"
+        case kVK_Escape: string += "Escape"
+        case kVK_F1: string += "F1"
+        case kVK_F2: string += "F2"
+        case kVK_F3: string += "F3"
+        case kVK_F4: string += "F4"
+        case kVK_F5: string += "F5"
+        case kVK_F6: string += "F6"
+        case kVK_F7: string += "F7"
+        case kVK_F8: string += "F8"
+        case kVK_F9: string += "F9"
+        case kVK_F10: string += "F10"
+        case kVK_F11: string += "F11"
+        case kVK_F12: string += "F12"
         default: string += "?"
         }
         
