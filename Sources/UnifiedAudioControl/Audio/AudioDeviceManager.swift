@@ -355,7 +355,7 @@ class AudioDeviceManager: ObservableObject {
     
     func selectDevice(deviceID: AudioDeviceID) {
         guard setOutputDevice(newDeviceID: deviceID) else {
-            print("AudioDeviceManager: Failed to set default output device to \(deviceID)")
+            NSLog("AudioDeviceManager: Failed to set default output device to \(deviceID)")
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -379,7 +379,7 @@ class AudioDeviceManager: ObservableObject {
         // the same "operation that could not complete reported success" shape already
         // fixed in UpdateManager.checkForUpdates and MediaKeyManager.start.
         guard setDeviceVolume(deviceID: selectedDeviceID, volume: newVolume) else {
-            print("AudioDeviceManager: Failed to set volume on device \(selectedDeviceID)")
+            NSLog("AudioDeviceManager: Failed to set volume on device \(selectedDeviceID)")
             return
         }
         self.volume = newVolume
@@ -395,7 +395,7 @@ class AudioDeviceManager: ObservableObject {
         guard selectedDeviceID != kAudioDeviceUnknown else { return }
         let newMuteState = !isMuted
         guard setDeviceMute(deviceID: selectedDeviceID, isMute: newMuteState) else {
-            print("AudioDeviceManager: Failed to set mute state on device \(selectedDeviceID)")
+            NSLog("AudioDeviceManager: Failed to set mute state on device \(selectedDeviceID)")
             return
         }
         self.isMuted = newMuteState

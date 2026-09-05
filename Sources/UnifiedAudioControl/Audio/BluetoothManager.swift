@@ -221,7 +221,7 @@ class BluetoothManager: ObservableObject {
             // Same silent-failure shape as the openConnection() failure path below:
             // printing alone left the UI showing no feedback at all when the device
             // couldn't even be resolved, which is worse than a failed connect attempt.
-            print("BluetoothManager: Could not find device with address \(device.id)")
+            NSLog("BluetoothManager: Could not find device with address \(device.id)")
             onConnectionFailed?()
             return
         }
@@ -229,7 +229,7 @@ class BluetoothManager: ObservableObject {
         let isAlreadyConnected = btDevice.isConnected()
         
         if isAlreadyConnected {
-            print("BluetoothManager: Device \(device.name) is already connected. Forcing reconnection to seize audio...")
+            NSLog("BluetoothManager: Device \(device.name) is already connected. Forcing reconnection to seize audio...")
             // Force disconnect first to trigger audio handover on reconnect
             btDevice.closeConnection()
             
@@ -246,7 +246,7 @@ class BluetoothManager: ObservableObject {
     private func performConnection(btDevice: IOBluetoothDevice, name: String) {
         // Run connection attempt on background thread to avoid blocking UI
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            print("BluetoothManager: Initiating connection to \(name) in background...")
+            NSLog("BluetoothManager: Initiating connection to \(name) in background...")
 
             // Open connection to the device
             // This triggers the macOS Bluetooth system to attempt connection
@@ -255,7 +255,7 @@ class BluetoothManager: ObservableObject {
 
             DispatchQueue.main.async {
                 if result == kIOReturnSuccess {
-                    print("BluetoothManager: Connection initiated to \(name)")
+                    NSLog("BluetoothManager: Connection initiated to \(name)")
 
                     // Refresh devices after a short delay to update UI
                     // We wait a bit longer to ensure the system registers the state change
@@ -263,7 +263,7 @@ class BluetoothManager: ObservableObject {
                         self?.refreshDevices()
                     }
                 } else {
-                    print("BluetoothManager: Failed to connect to \(name), error: \(result)")
+                    NSLog("BluetoothManager: Failed to connect to \(name), error: \(result)")
                     self?.onConnectionFailed?()
                 }
             }
@@ -273,7 +273,7 @@ class BluetoothManager: ObservableObject {
     /// Disconnects from a Bluetooth device
     func disconnect(device: BluetoothAudioDevice) {
         guard let btDevice = IOBluetoothDevice(addressString: device.id) else {
-            print("BluetoothManager: Could not find device with address \(device.id)")
+            NSLog("BluetoothManager: Could not find device with address \(device.id)")
             onDisconnectionFailed?()
             return
         }
@@ -281,7 +281,7 @@ class BluetoothManager: ObservableObject {
         let result = btDevice.closeConnection()
         
         if result == kIOReturnSuccess {
-            print("BluetoothManager: Disconnected from \(device.name)")
+            NSLog("BluetoothManager: Disconnected from \(device.name)")
             
             // Refresh devices after a short delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -291,7 +291,7 @@ class BluetoothManager: ObservableObject {
             // Same silent-failure shape connect() already guards against via
             // onConnectionFailed: printing to the console is invisible to the user,
             // so a failed disconnect looked identical to a successful one in the UI.
-            print("BluetoothManager: Failed to disconnect from \(device.name), error: \(result)")
+            NSLog("BluetoothManager: Failed to disconnect from \(device.name), error: \(result)")
             onDisconnectionFailed?()
         }
     }

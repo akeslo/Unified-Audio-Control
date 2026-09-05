@@ -28,7 +28,7 @@ class MenuBarManager: NSObject {
         if mediaKeyManager.checkAccessibilityPermissions() {
             let startSuccess = mediaKeyManager.start()
             if !startSuccess {
-                print("WARNING: Media key listening failed. Grant Accessibility permission in System Settings > Privacy & Security > Accessibility.")
+                NSLog("MenuBarManager: WARNING: Media key listening failed. Grant Accessibility permission in System Settings > Privacy & Security > Accessibility.")
             }
         }
         

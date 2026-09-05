@@ -42,7 +42,7 @@ class HotKeyManager: ObservableObject {
                 // an active shortcut that silently does nothing when pressed. Undo the
                 // OS-level registration and clear state exactly as the RegisterEventHotKey
                 // failure branch below does.
-                print("Failed to install hotkey event handler")
+                NSLog("HotKeyManager: Failed to install hotkey event handler")
                 UnregisterEventHotKey(hotKeyRef)
                 hotKeyRef = nil
                 currentHotKey = nil
@@ -53,7 +53,7 @@ class HotKeyManager: ObservableObject {
             currentHotKey = (keyCode, modifiers)
             saveHotKey(keyCode: keyCode, modifiers: modifiers)
         } else {
-            print("Failed to register hotkey: \(status)")
+            NSLog("HotKeyManager: Failed to register hotkey: %d", status)
             // `register()` always calls `unregister()` first, so a failed
             // RegisterEventHotKey call leaves nothing bound at the OS level.
             // Previously `currentHotKey` (and the persisted default) were left

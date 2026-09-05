@@ -37,7 +37,7 @@ class MediaKeyManager {
             },
             userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         ) else {
-            print("MediaKeyManager: Failed to create event tap. Check Accessibility permissions in System Settings > Privacy & Security.")
+            NSLog("MediaKeyManager: Failed to create event tap. Check Accessibility permissions in System Settings > Privacy & Security.")
             return false
         }
 
@@ -47,7 +47,7 @@ class MediaKeyManager {
         // later call short-circuited on the `eventTap == nil` guard above, leaving
         // media keys permanently dead with no way to recover short of a relaunch.
         guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
-            print("MediaKeyManager: Failed to create run loop source for the event tap.")
+            NSLog("MediaKeyManager: Failed to create run loop source for the event tap.")
             CFMachPortInvalidate(tap)
             return false
         }
