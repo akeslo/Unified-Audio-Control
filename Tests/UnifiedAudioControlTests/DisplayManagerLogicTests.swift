@@ -146,4 +146,28 @@ final class DisplayManagerLogicTests: XCTestCase {
         XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: -0.4), 0)
         XCTAssertEqual(DisplayManager.ddcPercent(fromFraction: 3.0), 100)
     }
+
+    // MARK: - applyReverted(fraction:command:displayID:to:)
+
+    func test_applyReverted_brightnessCommand_updatesOnlyBrightness() {
+        var displays = [DisplayInfo(id: 1, name: "A", uuid: "u1", brightness: 0.9, volume: 0.3)]
+        DisplayManager.applyReverted(fraction: 0.4, command: 0x10, displayID: 1, to: &displays)
+        XCTAssertEqual(displays[0].brightness, 0.4)
+        XCTAssertEqual(displays[0].volume, 0.3)
+    }
+
+    func test_applyReverted_volumeCommand_updatesOnlyVolume() {
+        var displays = [DisplayInfo(id: 1, name: "A", uuid: "u1", brightness: 0.9, volume: 0.3)]
+        DisplayManager.applyReverted(fraction: 0.6, command: 0x62, displayID: 1, to: &displays)
+        XCTAssertEqual(displays[0].brightness, 0.9)
+        XCTAssertEqual(displays[0].volume, 0.6)
+    }
+
+    func test_applyReverted_unknownCommandOrDisplay_isNoOp() {
+        var displays = [DisplayInfo(id: 1, name: "A", uuid: "u1", brightness: 0.9, volume: 0.3)]
+        DisplayManager.applyReverted(fraction: 0.1, command: 0x99, displayID: 1, to: &displays)
+        DisplayManager.applyReverted(fraction: 0.1, command: 0x10, displayID: 2, to: &displays)
+        XCTAssertEqual(displays[0].brightness, 0.9)
+        XCTAssertEqual(displays[0].volume, 0.3)
+    }
 }

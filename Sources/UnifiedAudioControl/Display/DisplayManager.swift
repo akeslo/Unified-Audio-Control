@@ -401,15 +401,22 @@ class DisplayManager: ObservableObject {
             return
         }
         DispatchQueue.main.async {
-            guard let index = self.displays.firstIndex(where: { $0.id == displayID }) else { return }
-            switch command {
-            case 0x10:
-                self.displays[index].brightness = fraction
-            case 0x62:
-                self.displays[index].volume = fraction
-            default:
-                break
-            }
+            Self.applyReverted(fraction: fraction, command: command, displayID: displayID, to: &self.displays)
+        }
+    }
+
+    /// Write a re-read DDC fraction back onto the matching display: 0x10 is
+    /// brightness, 0x62 is volume, any other command (or unknown display) is a no-op.
+    /// Extracted for unit testing (no CoreGraphics/DDC hardware access).
+    static func applyReverted(fraction: Float, command: UInt8, displayID: CGDirectDisplayID, to displays: inout [DisplayInfo]) {
+        guard let index = displays.firstIndex(where: { $0.id == displayID }) else { return }
+        switch command {
+        case 0x10:
+            displays[index].brightness = fraction
+        case 0x62:
+            displays[index].volume = fraction
+        default:
+            break
         }
     }
     
