@@ -76,6 +76,15 @@ class MediaKeyManager {
         }
     }
     
+    /// Decodes an NSEvent `data1` payload for a system-defined media-key event.
+    /// Bits 16-23 hold the key code; bit 8 of the flag word is 0xA for key down.
+    static func decodeMediaKey(data1: Int) -> (keyCode: Int, keyDown: Bool) {
+        let keyCode = (data1 & 0x00FF0000) >> 16
+        let keyFlags = data1 & 0x0000FFFF
+        let keyDown = ((keyFlags & 0xFF00) >> 8) == 0x0A
+        return (keyCode, keyDown)
+    }
+
     private func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         // Handle tap disabled events - re-enable
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
@@ -99,10 +108,7 @@ class MediaKeyManager {
         // Bits 0-15: flags (bit 8 = key down/up)
         // Bits 16-23: key code
         // Bits 24-31: reserved
-        let data1 = nsEvent.data1
-        let keyCode = (data1 & 0x00FF0000) >> 16
-        let keyFlags = data1 & 0x0000FFFF
-        let keyDown = ((keyFlags & 0xFF00) >> 8) == 0x0A
+        let (keyCode, keyDown) = MediaKeyManager.decodeMediaKey(data1: nsEvent.data1)
         
         // Only act on key down
         guard keyDown else {
