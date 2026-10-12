@@ -34,15 +34,7 @@ public class IntelDDC {
 
   public func write(command: UInt8, value: UInt16, errorRecoveryWaitTime: UInt32? = nil, writeSleepTime: UInt32 = 10000, numofWriteCycles: UInt8 = 2) -> Bool {
     var success = false
-    var data: [UInt8] = Array(repeating: 0, count: 7)
-
-    data[0] = 0x51
-    data[1] = 0x84
-    data[2] = 0x03
-    data[3] = command
-    data[4] = UInt8(value >> 8)
-    data[5] = UInt8(value & 255)
-    data[6] = 0x6E ^ data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5]
+    let packet = IntelDDC.writePacket(command: command, value: value)
 
     for _ in 1 ... numofWriteCycles {
       usleep(writeSleepTime)
@@ -50,6 +42,7 @@ public class IntelDDC {
       request.commFlags = 0
       request.sendAddress = 0x6E
       request.sendTransactionType = IOOptionBits(kIOI2CSimpleTransactionType)
+      var data = packet
       request.sendBuffer = withUnsafePointer(to: &data[0]) { vm_address_t(bitPattern: $0) }
       request.sendBytes = UInt32(data.count)
       request.replyTransactionType = IOOptionBits(kIOI2CNoTransactionType)
@@ -62,14 +55,8 @@ public class IntelDDC {
   }
 
   public func read(command: UInt8, tries: UInt = 1, replyTransactionType _: IOOptionBits? = nil, minReplyDelay: UInt64? = nil, errorRecoveryWaitTime: UInt32? = nil, writeSleepTime: UInt32 = 10000) -> (UInt16, UInt16)? {
-    var data: [UInt8] = Array(repeating: 0, count: 5)
+    var data = IntelDDC.readRequestPacket(command: command)
     var replyData: [UInt8] = Array(repeating: 0, count: 11)
-
-    data[0] = 0x51
-    data[1] = 0x82
-    data[2] = 0x01
-    data[3] = command
-    data[4] = 0x6E ^ data[0] ^ data[1] ^ data[2] ^ data[3]
 
     for i in 1 ... tries {
       usleep(writeSleepTime)
@@ -88,37 +75,84 @@ public class IntelDDC {
       request.replyBuffer = withUnsafePointer(to: &replyData[0]) { vm_address_t(bitPattern: $0) }
 
       if IntelDDC.send(request: &request, to: self.framebuffer, errorRecoveryWaitTime: errorRecoveryWaitTime) {
-        if replyData.count > 0 {
-          let checksum = replyData.last!
-          var calculated = UInt8(0x50)
-          for i in 0 ..< (replyData.count - 1) {
-            calculated ^= replyData[i]
-          }
-          guard checksum == calculated else {
-            os_log("Checksum of reply does not match. Expected %u, got %u.", type: .info, checksum, calculated)
-            os_log("Response was: %{public}@", type: .info, replyData.map { String(format: "%02X", $0) }.joined(separator: " "))
-            continue
-          }
-        }
-        guard replyData[2] == 0x02 else {
-          os_log("Got wrong response type for %{public}@. Expected %u, got %u.", type: .info, String(reflecting: command), 0x02, replyData[2])
+        switch IntelDDC.parseReadReply(replyData) {
+        case .checksumMismatch(let expected, let calculated):
+          os_log("Checksum of reply does not match. Expected %u, got %u.", type: .info, expected, calculated)
           os_log("Response was: %{public}@", type: .info, replyData.map { String(format: "%02X", $0) }.joined(separator: " "))
           continue
-        }
-        guard replyData[3] == 0x00 else {
+        case .wrongResponseType(let got):
+          os_log("Got wrong response type for %{public}@. Expected %u, got %u.", type: .info, String(reflecting: command), 0x02, got)
+          os_log("Response was: %{public}@", type: .info, replyData.map { String(format: "%02X", $0) }.joined(separator: " "))
+          continue
+        case .unsupported:
           os_log("Reading %{public}@ is not supported.", type: .info, String(reflecting: command))
           return nil
+        case .value(let currentValue, let maxValue):
+          if i > 1 {
+            os_log("Reading %{public}@ took %u tries.", type: .info, String(reflecting: command), i)
+          }
+          return (currentValue, maxValue)
         }
-        if i > 1 {
-          os_log("Reading %{public}@ took %u tries.", type: .info, String(reflecting: command), i)
-        }
-        let (mh, ml, sh, sl) = (replyData[6], replyData[7], replyData[8], replyData[9])
-        let maxValue = UInt16(mh << 8) + UInt16(ml)
-        let currentValue = UInt16(sh << 8) + UInt16(sl)
-        return (currentValue, maxValue)
       }
     }
     return nil
+  }
+
+  // MARK: - Pure packet helpers (no IOKit access; unit-tested)
+
+  /// DDC/CI "set VCP feature" packet: source 0x51, length 0x84, opcode 0x03, VCP code, value hi/lo, checksum.
+  static func writePacket(command: UInt8, value: UInt16) -> [UInt8] {
+    var data: [UInt8] = Array(repeating: 0, count: 7)
+    data[0] = 0x51
+    data[1] = 0x84
+    data[2] = 0x03
+    data[3] = command
+    data[4] = UInt8(value >> 8)
+    data[5] = UInt8(value & 255)
+    data[6] = 0x6E ^ data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4] ^ data[5]
+    return data
+  }
+
+  /// DDC/CI "get VCP feature" request packet.
+  static func readRequestPacket(command: UInt8) -> [UInt8] {
+    var data: [UInt8] = Array(repeating: 0, count: 5)
+    data[0] = 0x51
+    data[1] = 0x82
+    data[2] = 0x01
+    data[3] = command
+    data[4] = 0x6E ^ data[0] ^ data[1] ^ data[2] ^ data[3]
+    return data
+  }
+
+  enum ReadReply: Equatable {
+    case checksumMismatch(expected: UInt8, calculated: UInt8)
+    case wrongResponseType(got: UInt8)
+    case unsupported
+    case value(current: UInt16, max: UInt16)
+  }
+
+  /// Validates and decodes an 11-byte "get VCP feature" reply. Checks, in order: checksum, response type, result code.
+  static func parseReadReply(_ replyData: [UInt8]) -> ReadReply {
+    if replyData.count > 0 {
+      let checksum = replyData.last!
+      var calculated = UInt8(0x50)
+      for i in 0 ..< (replyData.count - 1) {
+        calculated ^= replyData[i]
+      }
+      guard checksum == calculated else {
+        return .checksumMismatch(expected: checksum, calculated: calculated)
+      }
+    }
+    guard replyData[2] == 0x02 else {
+      return .wrongResponseType(got: replyData[2])
+    }
+    guard replyData[3] == 0x00 else {
+      return .unsupported
+    }
+    let (mh, ml, sh, sl) = (replyData[6], replyData[7], replyData[8], replyData[9])
+    let maxValue = UInt16(mh << 8) + UInt16(ml)
+    let currentValue = UInt16(sh << 8) + UInt16(sl)
+    return .value(current: currentValue, max: maxValue)
   }
 
   private static func supportedTransactionType() -> IOOptionBits? {
